@@ -1,0 +1,24 @@
+{
+  "_readme": "Real-world benchmarks shown under each dashboard metric. Fill in value (short, e.g. '84% of B2B deals start with a referral'), source (the citation) and url. Leave value empty to show an empty slot. Nothing here is filled in automatically.",
+
+  "conn_win_rate":       { "value": "", "source": "", "url": "" },
+  "incumbent_share":     { "value": "", "source": "", "url": "" },
+  "not_cheapest":        { "value": "", "source": "", "url": "" },
+
+  "conn_type":           { "value": "", "source": "", "url": "" },
+  "pilot":               { "value": "", "source": "", "url": "" },
+  "proof":               { "value": "", "source": "", "url": "" },
+
+  "price":               { "value": "", "source": "", "url": "" },
+  "offers_per_buyer":    { "value": "", "source": "", "url": "" },
+  "offers_to_first_win": { "value": "", "source": "", "url": "" },
+  "time_to_first_deal":  { "value": "", "source": "", "url": "" },
+
+  "reasons_signed":      { "value": "", "source": "", "url": "" },
+  "reasons_stayed":      { "value": "", "source": "", "url": "" },
+  "reject_reasons":      { "value": "", "source": "", "url": "" },
+
+  "reasons_sellers_won": { "value": "", "source": "", "url": "" },
+  "reasons_sellers_lost": { "value": "", "source": "", "url": "" },
+  "delivery":            { "value": "", "source": "", "url": "" }
+}

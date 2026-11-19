@@ -1,0 +1,123 @@
+{
+  "_readme": "DRAFT role cards. Rewrite freely. Prices are in thousands of dollars per year. Categories are used in the order listed: a small class uses only the first few. Every company name here is invented as a placeholder. Keep each id unique. Allowed assets: reference, security_cert, pilot_ready. Allowed priorities: lowest_cost, lowest_risk, fastest_deployment. Allowed constraint types: requires_proof (with proof), requires_pilot, min_savings (with pct), max_deploy_weeks (with weeks).",
+
+  "categories": [
+    { "id": "cyber", "name": "Cybersecurity" },
+    { "id": "hr", "name": "HR and workforce" },
+    { "id": "logistics", "name": "Logistics and supply chain" },
+    { "id": "finance", "name": "Finance automation" },
+    { "id": "support", "name": "Customer support" }
+  ],
+
+  "proofs": {
+    "reference": "Reference customer",
+    "security_cert": "Security certification",
+    "pilot_ready": "Pilot-ready"
+  },
+
+  "relationships": {
+    "studied_together": "Studied together",
+    "ex_colleague": "Ex-colleague",
+    "shared_investor": "Shared investor"
+  },
+
+  "priorities": {
+    "lowest_cost": "Lowest cost",
+    "lowest_risk": "Lowest risk",
+    "fastest_deployment": "Fastest deployment"
+  },
+
+  "riskRule": "If you buy from a start-up and it fails to deliver, you lose all your points. Start-ups with no proof fail more often.",
+
+  "projectorRules": [
+    "Sellers: you have 3 offers. Find a buyer, negotiate face to face, then send the offer on your phone.",
+    "Buyers: you can sign 1 deal, or stay with your incumbent at zero risk.",
+    "If a start-up fails to deliver, its buyer loses everything. Choose who to trust."
+  ],
+
+  "exitQuestion": {
+    "buyer": "Main reason for your decision?",
+    "seller": "Why do you think you won or lost?"
+  },
+
+  "exitOptions": [
+    { "key": "trust", "label": "I knew / trusted them", "short": "Knew / trusted them" },
+    { "key": "price", "label": "Price" },
+    { "key": "proof", "label": "Proof and references" },
+    { "key": "fit", "label": "Product fit" },
+    { "key": "pilot", "label": "Low-risk pilot" },
+    { "key": "incumbent", "label": "Safer to stay with the incumbent", "short": "Safer to stay" }
+  ],
+
+  "rejectReasons": [
+    { "key": "price", "label": "Too expensive" },
+    { "key": "proof", "label": "Not enough proof" },
+    { "key": "unknown", "label": "I don't know them" },
+    { "key": "fit", "label": "Poor fit" },
+    { "key": "constraint", "label": "Breaks my boss's rule" }
+  ],
+
+  "sellers": [
+    { "id": "cy-s1", "category": "cyber", "name": "Sentrix", "tagline": "Stops phishing emails before they reach employee inboxes", "list": 170, "floor": 115, "assets": ["reference", "security_cert"], "reliability": 0.92, "deploy_weeks": 6 },
+    { "id": "cy-s2", "category": "cyber", "name": "LockLoop", "tagline": "Passwordless login for every internal app", "list": 150, "floor": 100, "assets": ["security_cert"], "reliability": 0.82, "deploy_weeks": 4 },
+    { "id": "cy-s3", "category": "cyber", "name": "GhostGrid", "tagline": "Finds the forgotten cloud servers attackers love", "list": 135, "floor": 85, "assets": [], "reliability": 0.58, "deploy_weeks": 3 },
+    { "id": "cy-s4", "category": "cyber", "name": "VaultPilot", "tagline": "Collects security audit evidence automatically", "list": 185, "floor": 130, "assets": ["reference", "pilot_ready"], "reliability": 0.90, "deploy_weeks": 5 },
+    { "id": "cy-s5", "category": "cyber", "name": "Nimbus Watch", "tagline": "Round-the-clock threat monitoring by a small expert team", "list": 160, "floor": 105, "assets": ["pilot_ready"], "reliability": 0.78, "deploy_weeks": 2 },
+    { "id": "cy-s6", "category": "cyber", "name": "Redline Labs", "tagline": "Continuous hacker-style testing of your own systems", "list": 140, "floor": 90, "assets": [], "reliability": 0.88, "deploy_weeks": 4 },
+
+    { "id": "hr-s1", "category": "hr", "name": "Tallybright", "tagline": "Predicts which employees are about to quit", "list": 110, "floor": 72, "assets": ["reference"], "reliability": 0.84, "deploy_weeks": 5 },
+    { "id": "hr-s2", "category": "hr", "name": "ShiftWise", "tagline": "AI shift scheduling for hourly workforces", "list": 95, "floor": 60, "assets": ["pilot_ready"], "reliability": 0.80, "deploy_weeks": 3 },
+    { "id": "hr-s3", "category": "hr", "name": "Kindred Pulse", "tagline": "Two-question weekly engagement surveys", "list": 80, "floor": 50, "assets": [], "reliability": 0.60, "deploy_weeks": 2 },
+    { "id": "hr-s4", "category": "hr", "name": "Onboardly", "tagline": "New-hire onboarding in one guided flow", "list": 120, "floor": 82, "assets": ["reference", "security_cert"], "reliability": 0.93, "deploy_weeks": 6 },
+    { "id": "hr-s5", "category": "hr", "name": "SkillAtlas", "tagline": "Maps the skills your company already has", "list": 105, "floor": 68, "assets": [], "reliability": 0.55, "deploy_weeks": 4 },
+    { "id": "hr-s6", "category": "hr", "name": "PayParity", "tagline": "Finds and fixes pay gaps before an audit does", "list": 115, "floor": 78, "assets": ["security_cert", "pilot_ready"], "reliability": 0.88, "deploy_weeks": 4 },
+
+    { "id": "lg-s1", "category": "logistics", "name": "RouteMint", "tagline": "Cuts delivery miles with live route planning", "list": 210, "floor": 140, "assets": ["reference", "pilot_ready"], "reliability": 0.90, "deploy_weeks": 4 },
+    { "id": "lg-s2", "category": "logistics", "name": "DockFlow", "tagline": "Schedules warehouse docks so trucks never wait", "list": 190, "floor": 125, "assets": ["reference"], "reliability": 0.83, "deploy_weeks": 5 },
+    { "id": "lg-s3", "category": "logistics", "name": "ColdTrace", "tagline": "Sensors that prove the cold chain was never broken", "list": 230, "floor": 160, "assets": ["security_cert"], "reliability": 0.80, "deploy_weeks": 7 },
+    { "id": "lg-s4", "category": "logistics", "name": "PalletIQ", "tagline": "Counts warehouse inventory with cameras", "list": 175, "floor": 110, "assets": [], "reliability": 0.57, "deploy_weeks": 3 },
+    { "id": "lg-s5", "category": "logistics", "name": "FreightFox", "tagline": "Finds the cheapest carrier for every shipment", "list": 160, "floor": 105, "assets": [], "reliability": 0.62, "deploy_weeks": 2 },
+    { "id": "lg-s6", "category": "logistics", "name": "Harborline", "tagline": "Predicts port delays two weeks ahead", "list": 220, "floor": 150, "assets": ["pilot_ready"], "reliability": 0.86, "deploy_weeks": 4 },
+
+    { "id": "fn-s1", "category": "finance", "name": "LedgerLeaf", "tagline": "Closes the monthly books in two days, not ten", "list": 150, "floor": 100, "assets": ["reference", "security_cert"], "reliability": 0.94, "deploy_weeks": 6 },
+    { "id": "fn-s2", "category": "finance", "name": "InvoiceJet", "tagline": "Reads and pays supplier invoices automatically", "list": 125, "floor": 80, "assets": ["reference"], "reliability": 0.85, "deploy_weeks": 4 },
+    { "id": "fn-s3", "category": "finance", "name": "SpendScope", "tagline": "Flags wasteful spend in every department", "list": 110, "floor": 70, "assets": [], "reliability": 0.60, "deploy_weeks": 3 },
+    { "id": "fn-s4", "category": "finance", "name": "CashHorizon", "tagline": "13-week cash forecasts, updated daily", "list": 140, "floor": 95, "assets": ["pilot_ready"], "reliability": 0.79, "deploy_weeks": 3 },
+    { "id": "fn-s5", "category": "finance", "name": "AuditAnt", "tagline": "Prepares audit files continuously in the background", "list": 135, "floor": 88, "assets": ["security_cert"], "reliability": 0.81, "deploy_weeks": 5 },
+    { "id": "fn-s6", "category": "finance", "name": "TaxTide", "tagline": "Automates sales tax filings in every state", "list": 120, "floor": 76, "assets": [], "reliability": 0.87, "deploy_weeks": 4 },
+
+    { "id": "cs-s1", "category": "support", "name": "ReplyRocket", "tagline": "AI drafts support answers in your brand voice", "list": 150, "floor": 98, "assets": ["reference", "pilot_ready"], "reliability": 0.90, "deploy_weeks": 3 },
+    { "id": "cs-s2", "category": "support", "name": "CalmQueue", "tagline": "Predicts ticket surges and staffs for them", "list": 135, "floor": 90, "assets": ["reference"], "reliability": 0.82, "deploy_weeks": 5 },
+    { "id": "cs-s3", "category": "support", "name": "VoiceMend", "tagline": "Real-time coaching for call-centre agents", "list": 165, "floor": 112, "assets": ["security_cert"], "reliability": 0.84, "deploy_weeks": 6 },
+    { "id": "cs-s4", "category": "support", "name": "HelpHive", "tagline": "Turns old tickets into a self-service help centre", "list": 115, "floor": 72, "assets": [], "reliability": 0.56, "deploy_weeks": 2 },
+    { "id": "cs-s5", "category": "support", "name": "EchoDesk", "tagline": "One inbox for chat, email and social messages", "list": 125, "floor": 80, "assets": [], "reliability": 0.63, "deploy_weeks": 3 },
+    { "id": "cs-s6", "category": "support", "name": "Lumen Assist", "tagline": "A support bot that speaks 40 languages", "list": 155, "floor": 104, "assets": ["security_cert", "pilot_ready"], "reliability": 0.89, "deploy_weeks": 4 }
+  ],
+
+  "buyers": [
+    { "id": "cy-b1", "category": "cyber", "enterprise": "Meridian Trust Bank", "title": "Head of IT Procurement", "need": "Email and identity security for 12,000 employees", "budget": 210, "incumbent": { "name": "Fortress Global", "price": 200 }, "priority": "lowest_risk", "constraint": { "type": "requires_proof", "proof": "security_cert", "text": "Legal requires a security certification." } },
+    { "id": "cy-b2", "category": "cyber", "enterprise": "Corvus Airlines", "title": "Director of Technology Sourcing", "need": "Security monitoring across 40 airports", "budget": 240, "incumbent": { "name": "IronWall Systems", "price": 230 }, "priority": "fastest_deployment", "constraint": { "type": "max_deploy_weeks", "weeks": 5, "text": "The CIO wants it live within 5 weeks." } },
+    { "id": "cy-b3", "category": "cyber", "enterprise": "Halden Insurance", "title": "VP Vendor Management", "need": "Security testing before a regulator audit", "budget": 190, "incumbent": { "name": "Fortress Global", "price": 185 }, "priority": "lowest_cost", "constraint": { "type": "requires_proof", "proof": "reference", "text": "Your boss signs only if another enterprise already uses it." } },
+    { "id": "cy-b4", "category": "cyber", "enterprise": "Pinecrest Health", "title": "Senior Procurement Manager", "need": "Protecting patient records across 9 hospitals", "budget": 225, "incumbent": { "name": "IronWall Systems", "price": 215 }, "priority": "lowest_risk", "constraint": { "type": "requires_pilot", "text": "The board wants a pilot before any full contract." } },
+
+    { "id": "hr-b1", "category": "hr", "enterprise": "Orchard Retail Group", "title": "Head of HR Technology", "need": "Scheduling for 30,000 store employees", "budget": 150, "incumbent": { "name": "PeopleCore", "price": 140 }, "priority": "lowest_cost", "constraint": { "type": "min_savings", "pct": 15, "text": "Finance approves a switch only if it saves at least 15%." } },
+    { "id": "hr-b2", "category": "hr", "enterprise": "Atlas Freight", "title": "HR Procurement Lead", "need": "Reducing turnover among 4,000 drivers", "budget": 135, "incumbent": { "name": "WorkSphere", "price": 130 }, "priority": "fastest_deployment", "constraint": { "type": "requires_pilot", "text": "Your boss insists on a pilot first." } },
+    { "id": "hr-b3", "category": "hr", "enterprise": "Sterling Hotels", "title": "Director of People Systems", "need": "Onboarding for seasonal staff", "budget": 160, "incumbent": { "name": "PeopleCore", "price": 155 }, "priority": "lowest_risk", "constraint": { "type": "requires_proof", "proof": "reference", "text": "Your boss signs only if another enterprise already uses it." } },
+    { "id": "hr-b4", "category": "hr", "enterprise": "Bluewater Energy", "title": "Senior Category Manager", "need": "Pay equity reporting for the board", "budget": 145, "incumbent": { "name": "WorkSphere", "price": 138 }, "priority": "lowest_risk", "constraint": { "type": "requires_proof", "proof": "security_cert", "text": "IT security must see a security certification." } },
+
+    { "id": "lg-b1", "category": "logistics", "enterprise": "Granite Foods", "title": "Director of Supply Chain Procurement", "need": "Route planning for 800 delivery trucks", "budget": 280, "incumbent": { "name": "TransCore Suite", "price": 270 }, "priority": "lowest_cost", "constraint": { "type": "min_savings", "pct": 20, "text": "The CFO approves a switch only if it saves at least 20%." } },
+    { "id": "lg-b2", "category": "logistics", "enterprise": "Vantage Pharma", "title": "Head of Logistics Sourcing", "need": "Cold chain tracking for vaccine shipments", "budget": 300, "incumbent": { "name": "OmniFreight", "price": 290 }, "priority": "lowest_risk", "constraint": { "type": "requires_proof", "proof": "security_cert", "text": "Quality assurance requires a security certification." } },
+    { "id": "lg-b3", "category": "logistics", "enterprise": "Summit Home Stores", "title": "Senior Procurement Manager", "need": "Warehouse efficiency before the holiday peak", "budget": 250, "incumbent": { "name": "TransCore Suite", "price": 240 }, "priority": "fastest_deployment", "constraint": { "type": "max_deploy_weeks", "weeks": 4, "text": "It must be live within 4 weeks, before the peak." } },
+    { "id": "lg-b4", "category": "logistics", "enterprise": "Kestrel Motors", "title": "VP Strategic Sourcing", "need": "Visibility over inbound parts shipments", "budget": 265, "incumbent": { "name": "OmniFreight", "price": 255 }, "priority": "lowest_risk", "constraint": { "type": "requires_pilot", "text": "Operations wants a pilot at one plant first." } },
+
+    { "id": "fn-b1", "category": "finance", "enterprise": "Crestline Manufacturing", "title": "Finance Systems Procurement Lead", "need": "A faster month-end close", "budget": 185, "incumbent": { "name": "Titan ERP Finance", "price": 175 }, "priority": "lowest_risk", "constraint": { "type": "requires_proof", "proof": "security_cert", "text": "The auditors require a security certification." } },
+    { "id": "fn-b2", "category": "finance", "enterprise": "Northwind Media", "title": "Director of Finance Operations", "need": "Processing 40,000 supplier invoices a month", "budget": 165, "incumbent": { "name": "LedgerMax", "price": 160 }, "priority": "lowest_cost", "constraint": { "type": "min_savings", "pct": 20, "text": "The CFO approves a switch only if it saves at least 20%." } },
+    { "id": "fn-b3", "category": "finance", "enterprise": "Aldergate Properties", "title": "Head of Procurement", "need": "Cash forecasting across 60 properties", "budget": 200, "incumbent": { "name": "Titan ERP Finance", "price": 190 }, "priority": "fastest_deployment", "constraint": { "type": "requires_pilot", "text": "Treasury wants a pilot before a full contract." } },
+    { "id": "fn-b4", "category": "finance", "enterprise": "Juniper Health Plans", "title": "Senior Sourcing Manager", "need": "Audit readiness all year round", "budget": 180, "incumbent": { "name": "LedgerMax", "price": 170 }, "priority": "lowest_risk", "constraint": { "type": "requires_proof", "proof": "reference", "text": "Your boss signs only if another enterprise already uses it." } },
+
+    { "id": "cs-b1", "category": "support", "enterprise": "Skyward Telecom", "title": "Director of Customer Care Sourcing", "need": "Support for 6 million subscribers", "budget": 220, "incumbent": { "name": "ServiceGiant", "price": 210 }, "priority": "lowest_cost", "constraint": { "type": "min_savings", "pct": 15, "text": "Finance approves a switch only if it saves at least 15%." } },
+    { "id": "cs-b2", "category": "support", "enterprise": "Marlow Outfitters", "title": "Head of CX Procurement", "need": "Handling the holiday-season support surge", "budget": 175, "incumbent": { "name": "HelpForce One", "price": 165 }, "priority": "fastest_deployment", "constraint": { "type": "max_deploy_weeks", "weeks": 4, "text": "It must be live within 4 weeks, before the holidays." } },
+    { "id": "cs-b3", "category": "support", "enterprise": "Unity Credit Union", "title": "Vendor Risk Manager", "need": "Member support under strict privacy rules", "budget": 195, "incumbent": { "name": "ServiceGiant", "price": 185 }, "priority": "lowest_risk", "constraint": { "type": "requires_proof", "proof": "security_cert", "text": "Compliance requires a security certification." } },
+    { "id": "cs-b4", "category": "support", "enterprise": "Parkside Travel", "title": "Senior Procurement Manager", "need": "Support in 12 languages", "budget": 205, "incumbent": { "name": "HelpForce One", "price": 198 }, "priority": "lowest_risk", "constraint": { "type": "requires_pilot", "text": "Your boss insists on a pilot first." } }
+  ]
+}

@@ -1,0 +1,28 @@
+/* The colour palette. Change these values to match your slide deck;
+   every screen (phones, projector, host panel) uses only these. */
+:root {
+  --bg: #f5f2ec;          /* page background */
+  --surface: #ffffff;     /* cards and panels */
+  --ink: #15233b;         /* main text */
+  --muted: #5d6779;       /* secondary text */
+  --line: #ddd8cd;        /* borders and dividers */
+
+  --brand: #1d4e89;       /* headers, primary buttons */
+  --brand-ink: #ffffff;   /* text on top of --brand */
+  --brand-soft: #e6eef8;  /* pale tint of the brand colour */
+
+  --accent: #d9730d;      /* highlights: connections, the key number */
+  --accent-soft: #fbeedd;
+
+  --good: #1e7f55;        /* delivered, accepted */
+  --good-soft: #e2f3ea;
+  --bad: #b93a2b;         /* failed, rejected, warnings */
+  --bad-soft: #f9e5e1;
+
+  --chart-1: #2a6fbb;     /* bars */
+  --chart-base: #8e97a6;  /* the comparison bar (no connection, no proof) */
+  --chart-track: #ece8df; /* the empty part of a bar */
+
+  --font: "Avenir Next", "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
+  --radius: 14px;
+}

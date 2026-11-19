@@ -1,0 +1,307 @@
+/* Game rules: role assignment, connections, offer fit, scoring, delivery.
+   Pure functions with no network or page access, so the same code runs on the
+   host laptop, on phones (to explain an offer) and in the offline demo. */
+(function (root) {
+  "use strict";
+  var B2B = (root.B2B = root.B2B || {});
+
+  // ---------- small helpers ----------
+  function makeRng(seed) {
+    var a = seed == null ? (Math.random() * 4294967296) >>> 0 : seed >>> 0;
+    return function () {
+      a = (a + 0x6d2b79f5) | 0;
+      var t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function shuffle(arr, rnd) {
+    var a = arr.slice();
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(rnd() * (i + 1));
+      var x = a[i]; a[i] = a[j]; a[j] = x;
+    }
+    return a;
+  }
+  function pick(arr, rnd) { return arr[Math.floor(rnd() * arr.length)]; }
+  function clone(o) { return JSON.parse(JSON.stringify(o)); }
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+  var ROMAN = ["", "", " II", " III", " IV", " V", " VI"];
+
+  // ---------- card file checks ----------
+  function validateCards(cards) {
+    var problems = [];
+    if (!cards || !cards.categories || !cards.sellers || !cards.buyers) {
+      return ["cards.json must contain categories, sellers and buyers."];
+    }
+    cards.categories.forEach(function (c) {
+      if (!cards.sellers.some(function (s) { return s.category === c.id; })) problems.push('No seller cards for category "' + c.id + '".');
+      if (!cards.buyers.some(function (b) { return b.category === c.id; })) problems.push('No buyer cards for category "' + c.id + '".');
+    });
+    cards.sellers.forEach(function (s) {
+      if (!(s.floor <= s.list)) problems.push("Seller " + s.id + ": floor must not exceed list price.");
+      if (!(s.reliability > 0 && s.reliability <= 1)) problems.push("Seller " + s.id + ": reliability must be between 0 and 1.");
+      (s.assets || []).forEach(function (a) { if (!cards.proofs[a]) problems.push("Seller " + s.id + ': unknown asset "' + a + '".'); });
+    });
+    cards.buyers.forEach(function (b) {
+      if (!cards.priorities[b.priority]) problems.push("Buyer " + b.id + ': unknown priority "' + b.priority + '".');
+      if (!b.incumbent || !(b.incumbent.price > 0)) problems.push("Buyer " + b.id + ": incumbent price missing.");
+      var t = b.constraint && b.constraint.type;
+      if (["requires_proof", "requires_pilot", "min_savings", "max_deploy_weeks"].indexOf(t) < 0) problems.push("Buyer " + b.id + ': unknown constraint type "' + t + '".');
+    });
+    return problems;
+  }
+
+  // ---------- assignment ----------
+  function categoriesInPlay(nBuyers, cards, cfg) {
+    var n = clamp(Math.floor(nBuyers / (cfg.minBuyersPerCategory || 2)), 1, cards.categories.length);
+    return cards.categories.slice(0, n).map(function (c) { return c.id; });
+  }
+
+  function makeCtx(assigned, cards, cfg, rnd) {
+    var ctx = { cards: cards, cfg: cfg, rnd: rnd, players: [], used: {}, dirty: {} };
+    (assigned || []).forEach(function (p) {
+      var w = { id: p.id, name: p.name, role: p.role, category: p.category, card: clone(p.card) };
+      ctx.players.push(w);
+      if (w.card && w.card.templateId) ctx.used[w.card.templateId] = (ctx.used[w.card.templateId] || 0) + 1;
+    });
+    return ctx;
+  }
+
+  function place(ctx, p, role, category) {
+    var cards = ctx.cards;
+    var pool = (role === "seller" ? cards.sellers : cards.buyers).filter(function (t) { return t.category === category; });
+    if (!pool.length) throw new Error("No " + role + " cards for category " + category);
+    var least = Math.min.apply(null, pool.map(function (t) { return ctx.used[t.id] || 0; }));
+    var t = pick(pool.filter(function (x) { return (ctx.used[x.id] || 0) === least; }), ctx.rnd);
+    var uses = (ctx.used[t.id] = (ctx.used[t.id] || 0) + 1);
+    var suffix = ROMAN[uses] != null ? ROMAN[uses] : " " + uses;
+    var cat = cards.categories.filter(function (c) { return c.id === category; })[0];
+    var card, pub;
+    if (role === "seller") {
+      card = {
+        role: "seller", templateId: t.id, category: category, categoryName: cat.name,
+        org: t.name + suffix, tagline: t.tagline, list: t.list, floor: t.floor,
+        assets: (t.assets || []).slice(), reliability: t.reliability, deployWeeks: t.deploy_weeks, connections: []
+      };
+      pub = { org: card.org, tagline: card.tagline, category: category, deployWeeks: card.deployWeeks };
+    } else {
+      card = {
+        role: "buyer", templateId: t.id, category: category, categoryName: cat.name,
+        org: t.enterprise + suffix, title: t.title, need: t.need, budget: t.budget,
+        incumbent: { name: t.incumbent.name, price: t.incumbent.price },
+        priority: t.priority, constraint: clone(t.constraint), connections: []
+      };
+      pub = { org: card.org, title: card.title, category: category, need: card.need };
+    }
+    var w = { id: p.id, name: p.name, role: role, category: category, card: card, pub: pub, isNew: true };
+    ctx.players.push(w);
+    return w;
+  }
+
+  function connect(ctx, seller, buyer) {
+    var type = pick(Object.keys(ctx.cards.relationships), ctx.rnd);
+    seller.card.connections.push({
+      id: buyer.id, name: buyer.name, org: buyer.card.org, type: type,
+      priority: buyer.card.priority, constraint: clone(buyer.card.constraint)
+    });
+    buyer.card.connections.push({
+      id: seller.id, name: seller.name, org: seller.card.org, type: type,
+      reliability: seller.card.reliability
+    });
+    ctx.dirty[seller.id] = true;
+    ctx.dirty[buyer.id] = true;
+  }
+
+  // Pick the least-connected eligible partner in the same category.
+  function findPartner(ctx, who, wantRole, maxPerPartner) {
+    var linked = {};
+    who.card.connections.forEach(function (c) { linked[c.id] = true; });
+    var pool = ctx.players.filter(function (x) {
+      return x.role === wantRole && x.category === who.category && !linked[x.id] && x.card.connections.length < maxPerPartner;
+    });
+    if (!pool.length) return null;
+    var least = Math.min.apply(null, pool.map(function (x) { return x.card.connections.length; }));
+    return pick(pool.filter(function (x) { return x.card.connections.length === least; }), ctx.rnd);
+  }
+
+  function connectSeller(ctx, seller, count) {
+    for (var i = 0; i < count; i++) {
+      var b = findPartner(ctx, seller, "buyer", ctx.cfg.maxConnectionsPerBuyer || 2);
+      if (!b) return;
+      connect(ctx, seller, b);
+    }
+  }
+
+  function toPatch(ctx) {
+    var out = [];
+    ctx.players.forEach(function (w) {
+      if (w.isNew) {
+        out.push({ id: w.id, role: w.role, category: w.category, card: w.card, pub: w.pub,
+                   offers_left: w.role === "seller" ? ctx.cfg.offersPerSeller : null });
+      } else if (ctx.dirty[w.id]) {
+        out.push({ id: w.id, card: w.card });
+      }
+    });
+    return { players: out };
+  }
+
+  // First assignment, when the host presses Start. `players` = [{id, name}].
+  function assign(players, cards, cfg, rnd) {
+    rnd = rnd || makeRng();
+    var ctx = makeCtx([], cards, cfg, rnd);
+    var order = shuffle(players, rnd);
+    var n = order.length;
+    var nS = Math.round(n * cfg.sellerShare);
+    if (n >= 2) nS = clamp(nS, 1, n - 1);
+    var sellers = order.slice(0, nS), buyers = order.slice(nS);
+    var cats = categoriesInPlay(buyers.length, cards, cfg);
+    var placedSellers = [];
+    buyers.forEach(function (p, i) { place(ctx, p, "buyer", cats[i % cats.length]); });
+    sellers.forEach(function (p, i) { placedSellers.push(place(ctx, p, "seller", cats[i % cats.length])); });
+    // Fixed quotas, so both "connected" and "not connected" groups are large enough to compare.
+    var mix = cfg.connectionMix || [0.4, 0.4, 0.2];
+    var n2 = Math.round(nS * mix[2]);
+    var n0 = Math.round(nS * mix[0]);
+    var n1 = Math.max(0, nS - n0 - n2);
+    shuffle(placedSellers, rnd).forEach(function (s, i) {
+      connectSeller(ctx, s, i < n2 ? 2 : i < n2 + n1 ? 1 : 0);
+    });
+    return toPatch(ctx);
+  }
+
+  // Late joiners. `assigned` = players that already hold a role (with cards).
+  function assignLate(newcomers, assigned, cards, cfg, rnd) {
+    rnd = rnd || makeRng();
+    var ctx = makeCtx(assigned, cards, cfg, rnd);
+    var mix = cfg.connectionMix || [0.4, 0.4, 0.2];
+    newcomers.forEach(function (p) {
+      var nS = ctx.players.filter(function (x) { return x.role === "seller"; }).length;
+      var nB = ctx.players.length - nS;
+      var n = ctx.players.length + 1;
+      var role = Math.abs((nS + 1) / n - cfg.sellerShare) <= Math.abs(nS / n - cfg.sellerShare) ? "seller" : "buyer";
+      if (nB === 0) role = "buyer";
+      var cats = [];
+      ctx.players.forEach(function (x) { if (cats.indexOf(x.category) < 0) cats.push(x.category); });
+      if (!cats.length) cats = categoriesInPlay(1, cards, cfg);
+      var counts = cats.map(function (c) {
+        return ctx.players.filter(function (x) { return x.category === c && x.role === role; }).length;
+      });
+      var least = Math.min.apply(null, counts);
+      var w = place(ctx, p, role, cats[counts.indexOf(least)]);
+      if (role === "seller") {
+        var r = rnd();
+        connectSeller(ctx, w, r < mix[0] ? 0 : r < mix[0] + mix[1] ? 1 : 2);
+      } else if (rnd() < 0.5) {
+        var s = findPartner(ctx, w, "seller", 2);
+        if (s) connect(ctx, s, w);
+      }
+    });
+    return toPatch(ctx);
+  }
+
+  // ---------- offer fit and scoring ----------
+  // sellerPub needs deployWeeks; offer needs price, pilot, proof.
+  function fit(buyerCard, offer, sellerPub, cfg) {
+    var inc = buyerCard.incumbent.price;
+    var savingsPct = ((inc - offer.price) / inc) * 100;
+    var proof = offer.proof || [];
+    var weeks = sellerPub && sellerPub.deployWeeks;
+    var rules = cfg.priorityRules;
+    var priorityMet =
+      buyerCard.priority === "lowest_cost" ? savingsPct >= rules.lowestCostSavingsPct :
+      buyerCard.priority === "lowest_risk" ? !!offer.pilot || proof.indexOf("reference") >= 0 :
+      buyerCard.priority === "fastest_deployment" ? weeks != null && weeks <= rules.fastestDeployWeeks : false;
+    var c = buyerCard.constraint || {};
+    var constraintMet =
+      c.type === "requires_proof" ? proof.indexOf(c.proof) >= 0 :
+      c.type === "requires_pilot" ? !!offer.pilot :
+      c.type === "min_savings" ? savingsPct >= c.pct :
+      c.type === "max_deploy_weeks" ? weeks != null && weeks <= c.weeks : true;
+    return { savingsPct: savingsPct, priorityMet: priorityMet, constraintMet: constraintMet, overBudget: offer.price > buyerCard.budget };
+  }
+
+  function priorityRule(key, cfg) {
+    var r = cfg.priorityRules;
+    return key === "lowest_cost" ? "Met when the price is at least " + r.lowestCostSavingsPct + "% under your incumbent." :
+           key === "lowest_risk" ? "Met when the offer includes a pilot or shows a reference customer." :
+           key === "fastest_deployment" ? "Met when the start-up deploys in " + r.fastestDeployWeeks + " weeks or less." : "";
+  }
+
+  // offer = the accepted offer (with delivered true/false), or null when the buyer stayed with the incumbent.
+  function buyerPoints(buyerCard, offer, sellerPub, cfg) {
+    var P = cfg.points;
+    if (!offer) return { total: P.incumbent, parts: [{ label: "Stayed with the incumbent", value: P.incumbent }] };
+    if (offer.delivered === false) {
+      return offer.pilot
+        ? { total: P.failedWithPilot, parts: [{ label: "Start-up failed, but the pilot limited the damage", value: P.failedWithPilot }] }
+        : { total: P.failed, parts: [{ label: "Start-up failed to deliver", value: P.failed }] };
+    }
+    var f = fit(buyerCard, offer, sellerPub, cfg);
+    var parts = [{ label: "Start-up delivered", value: P.startupBase }];
+    var sav = clamp(Math.round(f.savingsPct * P.perPercentSaved), -P.savingsCap, P.savingsCap);
+    parts.push({ label: sav >= 0 ? "Savings against the incumbent" : "Paid more than the incumbent", value: sav });
+    if (f.priorityMet) parts.push({ label: "Fits your hidden priority", value: P.priorityBonus });
+    if (!f.constraintMet) parts.push({ label: "Broke your boss's rule", value: -P.constraintPenalty });
+    var total = Math.max(0, parts.reduce(function (s, x) { return s + x.value; }, 0));
+    return { total: total, parts: parts };
+  }
+
+  function sellerDealPoints(sellerCard, offer, cfg) {
+    var P = cfg.points;
+    if (offer.delivered === false) return 0;
+    var span = sellerCard.list - sellerCard.floor;
+    var held = span > 0 ? (offer.price - sellerCard.floor) / span : 1;
+    var pts = P.sellerDeal + Math.round(P.sellerPriceHeld * clamp(held, 0, 1));
+    if (offer.pilot && sellerCard.assets.indexOf("pilot_ready") < 0) pts -= P.sellerPilotCost;
+    return Math.max(0, pts);
+  }
+
+  // ---------- delivery ----------
+  function needsResolve(players, offers) {
+    return offers.some(function (o) { return o.status === "accepted" && o.delivered == null; }) ||
+           players.some(function (p) { return p.role && p.points == null; });
+  }
+
+  // Draw delivery once per signed deal and score everyone. Returns a patch.
+  function resolve(players, offers, cfg, rnd) {
+    rnd = rnd || makeRng();
+    var byId = {};
+    players.forEach(function (p) { byId[p.id] = p; });
+    var offerPatch = [], sellerTotals = {}, buyerDeal = {};
+    offers.forEach(function (o) {
+      if (o.status !== "accepted") return;
+      var seller = byId[o.seller_id];
+      var delivered = o.delivered != null ? o.delivered : rnd() < seller.card.reliability;
+      var resolved = { price: o.price, pilot: o.pilot, proof: o.proof, delivered: delivered };
+      var sp = sellerDealPoints(seller.card, resolved, cfg);
+      sellerTotals[o.seller_id] = (sellerTotals[o.seller_id] || 0) + sp;
+      buyerDeal[o.buyer_id] = { offer: resolved, sellerPub: seller.pub };
+      offerPatch.push({ id: o.id, delivered: delivered, seller_points: sp });
+    });
+    var playerPatch = [];
+    players.forEach(function (p) {
+      if (p.role === "seller") playerPatch.push({ id: p.id, points: sellerTotals[p.id] || 0 });
+      else if (p.role === "buyer") {
+        var d = buyerDeal[p.id];
+        playerPatch.push({ id: p.id, points: buyerPoints(p.card, d ? d.offer : null, d ? d.sellerPub : null, cfg).total });
+      }
+    });
+    return { offers: offerPatch, players: playerPatch };
+  }
+
+  // ---------- clock ----------
+  function remainingMs(game, now) {
+    if (game.phase === "paused") return game.paused_ms || 0;
+    if (game.phase === "open") return Math.max(0, game.ends_at - now);
+    return 0;
+  }
+
+  B2B.engine = {
+    makeRng: makeRng, shuffle: shuffle, pick: pick, clone: clone, clamp: clamp,
+    validateCards: validateCards, categoriesInPlay: categoriesInPlay,
+    assign: assign, assignLate: assignLate,
+    fit: fit, priorityRule: priorityRule, buyerPoints: buyerPoints, sellerDealPoints: sellerDealPoints,
+    needsResolve: needsResolve, resolve: resolve, remainingMs: remainingMs
+  };
+})(typeof window !== "undefined" ? window : globalThis);
