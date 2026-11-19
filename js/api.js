@@ -49,6 +49,7 @@
   }
   function offerView(o) {
     return { id: o.id, seller_id: o.seller_id, buyer_id: o.buyer_id, price: o.price, pilot: o.pilot, proof: o.proof,
+             fast: !!o.fast, guess: o.guess || null, cost: o.cost || 0,
              status: o.status, reason: o.reason, created_at: o.created_at, sent_t: o.sent_t,
              decided_at: o.decided_at, decided_t: o.decided_t, delivered: o.delivered, seller_points: o.seller_points,
              revisions: o.revisions || 0 };
@@ -60,6 +61,9 @@
               stay_level: p.stay_level == null ? null : p.stay_level };
     if (withToken) r.token = p.token;
     return r;
+  }
+  function cleanGuess(v) {
+    return ["lowest_cost", "lowest_risk", "fastest_deployment", "none"].indexOf(v) >= 0 ? v : null;
   }
   function openOnly(g) {
     if (g.phase !== "open" || Date.now() >= g.ends_at) throw fail("not_open");
@@ -133,8 +137,10 @@
       };
     },
 
-    offer: function (code, token, buyerId, price, pilot, proof, desk) {
+    // extra = { fast, guess }: fast-track deployment, and the seller's read of what the buyer cares about.
+    offer: function (code, token, buyerId, price, pilot, proof, desk, extra) {
       var g = need(code), me = byToken(g, token);
+      extra = extra || {};
       if (!me || me.role !== "seller") throw fail("not_joined");
       openOnly(g);
       if (!(me.offers_left > 0)) throw fail("no_offers_left");
@@ -147,19 +153,24 @@
       if (!(price >= me.card.floor && price <= me.card.list)) throw fail("bad_price");
       proof = (proof || []).slice();
       if (proof.some(function (a) { return me.card.assets.indexOf(a) < 0; })) throw fail("bad_proof");
+      var E = B2B.engine, terms = { pilot: !!pilot, fast: !!extra.fast, proof: proof };
+      var cost = E.offerCost(me.card, terms);
+      if (cost > E.tokensFree(me.card, g.offers.filter(function (x) { return x.seller_id === me.id; }))) throw fail("no_tokens");
       var now = Date.now();
-      var o = { id: uid(), seller_id: me.id, buyer_id: b.id, price: price, pilot: !!pilot, proof: proof, status: "pending",
+      var o = { id: uid(), seller_id: me.id, buyer_id: b.id, price: price, pilot: !!pilot, proof: proof, fast: !!extra.fast,
+                guess: cleanGuess(extra.guess), cost: cost, status: "pending",
                 reason: null, created_at: now, sent_t: clock(g, now), decided_at: null, decided_t: null, delivered: null, seller_points: null, revisions: 0 };
       g.offers.push(o);
       me.offers_left -= 1;
-      log(g, "offer", me.id, { offer: o.id, buyer: b.id, price: price, pilot: !!pilot, proof: proof });
+      log(g, "offer", me.id, { offer: o.id, buyer: b.id, price: price, pilot: !!pilot, proof: proof, fast: o.fast, guess: o.guess, tokens: cost });
       save(g);
       return { id: o.id };
     },
 
     // Change the terms of a term sheet the buyer has not answered yet. Free: it does not use up an offer.
-    revise: function (code, token, offerId, price, pilot, proof) {
+    revise: function (code, token, offerId, price, pilot, proof, extra) {
       var g = need(code), me = byToken(g, token);
+      extra = extra || {};
       if (!me || me.role !== "seller") throw fail("not_joined");
       openOnly(g);
       var o = byId(g.offers, offerId);
@@ -168,8 +179,13 @@
       if (!(price >= me.card.floor && price <= me.card.list)) throw fail("bad_price");
       proof = (proof || []).slice();
       if (proof.some(function (a) { return me.card.assets.indexOf(a) < 0; })) throw fail("bad_proof");
-      log(g, "revise", me.id, { offer: o.id, buyer: o.buyer_id, from: { price: o.price, pilot: o.pilot, proof: o.proof }, to: { price: price, pilot: !!pilot, proof: proof } });
-      o.price = price; o.pilot = !!pilot; o.proof = proof; o.revisions = (o.revisions || 0) + 1;
+      var E = B2B.engine, fast = extra.fast == null ? !!o.fast : !!extra.fast;
+      var cost = E.offerCost(me.card, { pilot: !!pilot, fast: fast, proof: proof });
+      if (cost > E.tokensFree(me.card, g.offers.filter(function (x) { return x.seller_id === me.id; }), o.id)) throw fail("no_tokens");
+      var guess = extra.guess == null ? o.guess || null : cleanGuess(extra.guess);
+      log(g, "revise", me.id, { offer: o.id, buyer: o.buyer_id, from: { price: o.price, pilot: o.pilot, proof: o.proof, fast: !!o.fast, tokens: o.cost || 0 },
+                                to: { price: price, pilot: !!pilot, proof: proof, fast: fast, guess: guess, tokens: cost } });
+      o.price = price; o.pilot = !!pilot; o.proof = proof; o.fast = fast; o.guess = guess; o.cost = cost; o.revisions = (o.revisions || 0) + 1;
       save(g);
       return { ok: true };
     },
@@ -302,19 +318,27 @@
   // =====================================================================
   // Remote back end (Supabase database functions)
   // =====================================================================
+  // A call that gets no answer is given up after 10 seconds, so one stuck connection cannot freeze a phone or the host.
+  // The caller's loop simply asks again; every game action is safe to repeat.
+  var RPC_TIMEOUT_MS = 10000;
   function rpc(fn, params) {
+    var ac = typeof AbortController !== "undefined" ? new AbortController() : null;
+    var timer = ac ? setTimeout(function () { ac.abort(); }, RPC_TIMEOUT_MS) : null;
+    function done() { if (timer) clearTimeout(timer); }
     return fetch(cfg.supabaseUrl.replace(/\/$/, "") + "/rest/v1/rpc/" + fn, {
       method: "POST",
       headers: { "Content-Type": "application/json", apikey: cfg.supabaseKey, Authorization: "Bearer " + cfg.supabaseKey },
-      body: JSON.stringify(params)
+      body: JSON.stringify(params),
+      signal: ac ? ac.signal : undefined
     }).then(function (res) {
       return res.text().then(function (text) {
+        done();
         var body = null;
         try { body = text ? JSON.parse(text) : null; } catch (e) { /* not JSON */ }
         if (!res.ok) throw fail((body && body.message) || "server_" + res.status);
         return body;
-      });
-    }, function () { throw fail("network"); });
+      }, function () { done(); throw fail("network"); });
+    }, function () { done(); throw fail("network"); });
   }
 
   var remoteApi = {
@@ -322,11 +346,15 @@
     join: function (code, name, token, bot) { return rpc("sim_join", { p_code: code, p_name: name, p_token: token, p_bot: !!bot }); },
     state: function (code, token) { return rpc("sim_state", { p_code: code, p_token: token }); },
     public: function (code) { return rpc("sim_public", { p_code: code }); },
-    offer: function (code, token, buyerId, price, pilot, proof, desk) {
-      return rpc("sim_offer", { p_code: code, p_token: token, p_buyer: buyerId, p_price: price, p_pilot: !!pilot, p_proof: proof || [], p_desk: desk == null ? null : String(desk) });
+    offer: function (code, token, buyerId, price, pilot, proof, desk, extra) {
+      extra = extra || {};
+      return rpc("sim_offer", { p_code: code, p_token: token, p_buyer: buyerId, p_price: price, p_pilot: !!pilot, p_proof: proof || [], p_desk: desk == null ? null : String(desk),
+                                p_fast: !!extra.fast, p_guess: extra.guess || null });
     },
-    revise: function (code, token, offerId, price, pilot, proof) {
-      return rpc("sim_revise", { p_code: code, p_token: token, p_offer: offerId, p_price: price, p_pilot: !!pilot, p_proof: proof || [] });
+    revise: function (code, token, offerId, price, pilot, proof, extra) {
+      extra = extra || {};
+      return rpc("sim_revise", { p_code: code, p_token: token, p_offer: offerId, p_price: price, p_pilot: !!pilot, p_proof: proof || [],
+                                 p_fast: extra.fast == null ? null : !!extra.fast, p_guess: extra.guess || null });
     },
     decide: function (code, token, offerId, accept, reason, expectPrice) {
       return rpc("sim_decide", { p_code: code, p_token: token, p_offer: offerId, p_accept: !!accept, p_reason: reason || null, p_expect_price: expectPrice == null ? null : expectPrice });
@@ -366,6 +394,7 @@
       buyer_closed: "That buyer has already decided.",
       bad_price: "The price must be between your floor and your list price.",
       bad_proof: "You can only show proof you actually hold.",
+      no_tokens: "Not enough tokens. Take something off this term sheet, or off another open one.",
       bad_desk: "That is not their desk number. Ask them to show you their badge.",
       already_pitched: "You already have an open term sheet with this buyer. Edit that one.",
       offer_changed: "The seller just changed these terms. Check them again.",

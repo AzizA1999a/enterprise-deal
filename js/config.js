@@ -26,6 +26,19 @@ window.B2B_CONFIG = {
   connectionMix: [0.4, 0.4, 0.2],
   maxConnectionsPerBuyer: 2,
 
+  // You cannot give everything. Each seller has a few resource tokens: a small team's time.
+  // Tokens are tied up by every open or signed term sheet, and come back when a buyer says no.
+  // These are game settings, not measured facts. Set on: false to make every extra free again.
+  tokens: {
+    on: true,
+    perSeller: 6,     // tokens a seller holds
+    pilot: 3,         // a pilot
+    pilotReady: 2,    // ...for a seller whose card says "pilot-ready"
+    fast: 2,          // fast-track deployment (a dedicated team)
+    proof: 1,         // each proof shown: a reference call, a security review
+    fastWeeks: 4      // a fast-tracked deployment takes this many weeks
+  },
+
   // The big vendors fight back. Every buyer's incumbent has an account manager played by the computer.
   // These are game settings, not measured facts. Set on: false to switch the account managers off.
   rivals: {
@@ -54,7 +67,7 @@ window.B2B_CONFIG = {
     failedWithPilot: 25,     // start-up fails, but the deal began with a pilot
     sellerDeal: 40,          // seller: each delivered deal
     sellerPriceHeld: 60,     // seller: up to this many for holding price above the floor
-    sellerPilotCost: 20      // seller: cost of a pilot without the "pilot-ready" asset
+    sellerPilotCost: 20      // seller: cost of a pilot without the "pilot-ready" asset (only when tokens are off)
   },
 
   // How a hidden priority is judged.

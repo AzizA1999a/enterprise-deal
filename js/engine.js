@@ -96,6 +96,12 @@
         org: t.name + suffix, tagline: t.tagline, list: t.list, floor: t.floor,
         assets: (t.assets || []).slice(), reliability: t.reliability, deployWeeks: t.deploy_weeks, connections: []
       };
+      // What this seller's extras cost. Kept on the card so the phone, the host and the database all agree.
+      var T = ctx.cfg.tokens;
+      if (T && T.on) {
+        card.tokens = { budget: T.perSeller, pilot: card.assets.indexOf("pilot_ready") >= 0 ? T.pilotReady : T.pilot,
+                        fast: T.fast, proof: T.proof, fastWeeks: T.fastWeeks };
+      }
       pub = { org: card.org, tagline: card.tagline, category: category, deployWeeks: card.deployWeeks };
     } else {
       card = {
@@ -219,13 +225,43 @@
     return toPatch(ctx);
   }
 
+  // ---------- resource tokens ----------
+  // Proof a seller can choose to show. "Pilot-ready" is not shown: it makes the pilot cheaper.
+  function showable(sellerCard) { return (sellerCard.assets || []).filter(function (a) { return a !== "pilot_ready"; }); }
+  // Tokens one term sheet ties up. 0 when the game runs without tokens.
+  function offerCost(sellerCard, offer) {
+    var T = sellerCard && sellerCard.tokens;
+    if (!T) return 0;
+    return (offer.pilot ? T.pilot : 0) + (offer.fast ? T.fast : 0) +
+      (offer.proof || []).filter(function (a) { return a !== "pilot_ready"; }).length * T.proof;
+  }
+  // Tokens tied up right now: open and signed term sheets. `exceptId` leaves out the one being edited.
+  function tokensUsed(sellerCard, offers, exceptId) {
+    return (offers || []).reduce(function (n, o) {
+      return n + ((o.status === "pending" || o.status === "accepted") && o.id !== exceptId ? offerCost(sellerCard, o) : 0);
+    }, 0);
+  }
+  function tokensFree(sellerCard, offers, exceptId) {
+    var T = sellerCard && sellerCard.tokens;
+    return T ? T.budget - tokensUsed(sellerCard, offers, exceptId) : Infinity;
+  }
+  // Weeks to go live under a term sheet: fast-track brings a slow start-up down to the fast-track time.
+  function deployWeeks(offer, sellerPub, cfg) {
+    var w = sellerPub && sellerPub.deployWeeks, fw = cfg.tokens && cfg.tokens.fastWeeks;
+    return offer && offer.fast && w != null && fw != null ? Math.min(w, fw) : w;
+  }
+  // Did the seller know what this buyer cared about? "right", "wrong", or "none" (did not ask).
+  function readOf(offer, buyerCard) {
+    return !offer.guess || offer.guess === "none" ? "none" : offer.guess === buyerCard.priority ? "right" : "wrong";
+  }
+
   // ---------- offer fit and scoring ----------
-  // sellerPub needs deployWeeks; offer needs price, pilot, proof.
+  // sellerPub needs deployWeeks; offer needs price, pilot, proof (and fast, when fast-track was added).
   function fit(buyerCard, offer, sellerPub, cfg) {
     var inc = buyerCard.incumbent.price;
     var savingsPct = ((inc - offer.price) / inc) * 100;
     var proof = offer.proof || [];
-    var weeks = sellerPub && sellerPub.deployWeeks;
+    var weeks = deployWeeks(offer, sellerPub, cfg);
     var rules = cfg.priorityRules;
     var priorityMet =
       buyerCard.priority === "lowest_cost" ? savingsPct >= rules.lowestCostSavingsPct :
@@ -244,7 +280,7 @@
     var r = cfg.priorityRules;
     return key === "lowest_cost" ? "Met when the price is at least " + r.lowestCostSavingsPct + "% under your incumbent." :
            key === "lowest_risk" ? "Met when the offer includes a pilot or shows a reference customer." :
-           key === "fastest_deployment" ? "Met when the start-up deploys in " + r.fastestDeployWeeks + " weeks or less." : "";
+           key === "fastest_deployment" ? "Met when the start-up deploys in " + r.fastestDeployWeeks + " weeks or less. Fast-track counts." : "";
   }
 
   // ---------- the incumbent fights back ----------
@@ -285,7 +321,7 @@
       if (f.savingsPct > bestSav) { best = o; bestSav = f.savingsPct; }
     });
     // Only react to something new: a new term sheet, or better terms on an old one.
-    var sig = live.map(function (o) { return o.id + ":" + o.price + ":" + (o.pilot ? 1 : 0) + ":" + (o.proof || []).length; }).sort().join("|");
+    var sig = live.map(function (o) { return o.id + ":" + o.price + ":" + (o.pilot ? 1 : 0) + ":" + (o.proof || []).length + (o.fast ? ":f" : ""); }).sort().join("|");
     if (last && last.sig === sig) return null;
     var answered = list.filter(function (c) { return c.kind !== "early"; }).length;
     var isFinal = answered >= 1 || list.length >= R.maxCounters - 1;
@@ -329,7 +365,8 @@
     var span = sellerCard.list - sellerCard.floor;
     var held = span > 0 ? (offer.price - sellerCard.floor) / span : 1;
     var pts = P.sellerDeal + Math.round(P.sellerPriceHeld * clamp(held, 0, 1));
-    if (offer.pilot && sellerCard.assets.indexOf("pilot_ready") < 0) pts -= P.sellerPilotCost;
+    // With tokens in play a pilot is paid for in tokens, not in points.
+    if (!sellerCard.tokens && offer.pilot && sellerCard.assets.indexOf("pilot_ready") < 0) pts -= P.sellerPilotCost || 0;
     return Math.max(0, pts);
   }
 
@@ -349,7 +386,7 @@
       if (o.status !== "accepted") return;
       var seller = byId[o.seller_id];
       var delivered = o.delivered != null ? o.delivered : hash01("delivery:" + o.id) < seller.card.reliability;
-      var resolved = { price: o.price, pilot: o.pilot, proof: o.proof, delivered: delivered };
+      var resolved = { price: o.price, pilot: o.pilot, proof: o.proof, fast: o.fast, delivered: delivered };
       var sp = sellerDealPoints(seller.card, resolved, cfg);
       sellerTotals[o.seller_id] = (sellerTotals[o.seller_id] || 0) + sp;
       buyerDeal[o.buyer_id] = { offer: resolved, sellerPub: seller.pub };
@@ -377,6 +414,7 @@
     makeRng: makeRng, hash01: hash01, shuffle: shuffle, pick: pick, clone: clone, clamp: clamp,
     validateCards: validateCards, categoriesInPlay: categoriesInPlay,
     assign: assign, assignLate: assignLate,
+    showable: showable, offerCost: offerCost, tokensUsed: tokensUsed, tokensFree: tokensFree, deployWeeks: deployWeeks, readOf: readOf,
     fit: fit, priorityRule: priorityRule, buyerPoints: buyerPoints, sellerDealPoints: sellerDealPoints,
     counters: counters, standing: standing, stayValue: stayValue, rivalCounter: rivalCounter,
     needsResolve: needsResolve, resolve: resolve, remainingMs: remainingMs

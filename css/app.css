@@ -123,6 +123,11 @@ input { font: inherit; color: inherit; }
 .option { display: flex; align-items: center; gap: 12px; border: 2px solid var(--ink); border-radius: 12px; padding: 12px; width: 100%;
   background: var(--surface); text-align: left; }
 .option.on { background: var(--brand-soft); }
+.option.cant { opacity: 0.45; }
+.option .cost { flex: none; min-width: 2em; height: 2em; display: grid; place-items: center; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-weight: 800; }
+.picks { display: flex; flex-wrap: wrap; gap: 8px; }
+.steps { margin: 0; padding-left: 1.3em; display: grid; gap: 4px; }
+.steps ul { margin: 2px 0 0; padding-left: 1.1em; font-size: 0.95em; }
 .option .box { width: 26px; height: 26px; border-radius: 7px; border: 2px solid var(--ink); flex: none; display: grid; place-items: center;
   font-weight: 800; color: var(--brand-ink); }
 .option.on .box { background: var(--brand); }

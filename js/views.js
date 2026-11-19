@@ -45,11 +45,11 @@
         (refAt != null ? '<div class="ref" style="left:' + refAt + '%"></div>' : "") + "</div></div>";
     }).join("") + "</div>";
   }
-  function rateBars(list, baseKey) {
+  function rateBars(list, baseKey, compact) {
     return bars(list.map(function (x) {
       var r = x.rate;
       return { label: x.label, width: r.pct || 0, value: r.n ? pct(r.pct) : "no offers", note: r.n ? r.won + " of " + r.n : "", base: x.key === baseKey, empty: !r.n };
-    }));
+    }), null, compact);
   }
   function countBars(tally, list, limit) {
     var keys = Object.keys(tally).sort(function (a, b) { return tally[b] - tally[a]; }).slice(0, limit || 6);
@@ -206,6 +206,22 @@
         (d.earlyLocked ? " " + d.earlyLocked + (d.earlyLocked === 1 ? " buyer was" : " buyers were") + " renewed early, before any start-up reached them." : "") + "</p>",
         "incumbent_defence", "Buyers who were pitched by at least one start-up");
     },
+    // Sellers tap what they think the buyer cares about before sending a term sheet.
+    read: function (st) {
+      var r = st.read, t = "Did the seller know what the buyer wanted?";
+      if (!r.on) return panel(t, '<p class="muted">Not recorded in this game.</p>', "read_buyer");
+      return panel(t, rateBars(r.bars, "none", true) + '<p class="muted" style="margin-top:0.4rem">Term sheets that fitted both the buyer\'s priority and the boss\'s rule: ' +
+        (r.fit.n ? pct(r.fit.pct) + " signed (" + r.fit.won + " of " + r.fit.n + ")" : "none were sent") + ". The rest: " +
+        (r.noFit.n ? pct(r.noFit.pct) + " (" + r.noFit.won + " of " + r.noFit.n + ")" : "none") + ".</p>", "read_buyer", "Share of term sheets signed");
+    },
+    // Every extra on a term sheet ties up some of the seller's few tokens.
+    load: function (st) {
+      var l = st.load, t = "Did giving more win more?";
+      if (!l.on) return panel(t, '<p class="muted">This game was played without resource tokens.</p>', "tokens_load");
+      return panel(t, rateBars(l.bars, "light", true) + '<p class="muted" style="margin-top:0.4rem">Each seller held ' + l.budget + " tokens." +
+        (l.avg == null ? "" : " Average term sheet: " + l.avg.toFixed(1) + (l.avgWon == null ? "." : "; average signed one: " + l.avgWon.toFixed(1) + ".")) + "</p>",
+        "tokens_load", "Share of term sheets signed, by tokens on them");
+    },
     connQuick: function (st) {
       var q = st.quick;
       return panel("Term sheets signed, with and without a connection", bars([
@@ -219,14 +235,14 @@
     }
   };
   var P = V.panels;
-  V.full1 = function (st) { return head("What won deals", 1) + '<div class="dash c3">' + P.conn(st) + P.pilot(st) + P.proof(st) + "</div>"; };
+  V.full1 = function (st) { return head("What won deals", 1) + '<div class="dash c4 even">' + P.read(st) + P.conn(st) + P.pilot(st) + P.proof(st) + "</div>"; };
   V.full2 = function (st) { return head("Price and effort", 2) + '<div class="dash c4">' + P.price(st) + P.perBuyer(st) + P.firstWin(st) + P.time(st) + "</div>"; };
   V.full3 = function (st) {
     return head("What buyers said drove the decision", 3) + (st.defence.on
       ? '<div class="dash c4 even">' + P.defence(st) + P.signed(st) + P.stayed(st) + P.reject(st) + "</div>"
       : '<div class="dash c3">' + P.signed(st) + P.stayed(st) + P.reject(st) + "</div>");
   };
-  V.full4 = function (st) { return head("What sellers believed, and what the risk really was", 4) + '<div class="dash c3">' + P.sellersWon(st) + P.sellersLost(st) + P.delivery(st) + "</div>"; };
+  V.full4 = function (st) { return head("What sellers believed, and what the risk really was", 4) + '<div class="dash c4 even">' + P.load(st) + P.sellersWon(st) + P.sellersLost(st) + P.delivery(st) + "</div>"; };
 
   B2B.views = V;
 })();

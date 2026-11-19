@@ -39,13 +39,31 @@ in APA format on the last slides. The wording is a draft for the team to rewrite
 
 ## How the game is played
 
-- Everyone stands up. Sellers walk to buyers in their category and pitch face to face.
+- Everyone stands up. Sellers walk to buyers in their category, ask what they need, and pitch face to face.
 - Each buyer has a private desk number on their Inbox tab. A seller needs it to open a term sheet, so
   nobody can send offers from across the room.
-- The seller writes what was agreed (price, pilot, proof shown) and can edit it while they haggle. Editing
-  is free; opening a term sheet uses one of the seller's three.
+- The seller writes what was agreed (price, pilot, fast-track, proof shown) and can edit it while they haggle.
+  Editing is free; opening a term sheet uses one of the seller's three.
 - The buyer signs it or rejects it. A buyer signs one deal, or stays with the incumbent.
 - The Badge tab turns the phone into a name tag.
+
+### You cannot give everything
+
+A seller who offers the floor price and ticks every box has nothing to decide, so extras are scarce:
+
+- Each seller holds **6 resource tokens**, standing for a small team's time.
+- A pilot ties up 3 (2 for a seller whose card says "pilot-ready"), fast-track deployment 2, each proof shown 1.
+  A seller holding everything cannot put it all on one term sheet.
+- Tokens are tied up by every open or signed term sheet. They come back when a buyer rejects it, signs someone
+  else or stays with the incumbent, and when the seller edits an extra off.
+- Fast-track brings a slow start-up down to 4 weeks, which is what "fastest deployment" buyers need.
+- What a buyer does not need adds nothing to their score. So a seller has to find out the buyer's hidden
+  priority and their boss's rule: by asking, or through a connection, who sees both.
+- Before sending, the seller taps what they think the buyer cares about most (or "I did not ask"). Two results
+  panels use this: "Did the seller know what the buyer wanted?" and "Did giving more win more?".
+
+All of it is in `tokens` in `js/config.js` (`on: false` makes every extra free again). The questions sellers
+are advised to ask are `askFirst` in `data/cards.json`. These are game settings, not measured facts.
 
 ### The big vendors fight back
 
@@ -94,7 +112,7 @@ panel's first screen.
 | `data/cards.json` | Role card templates, categories, wording of rules, exit options. Drafts: rewrite freely. |
 | `data/benchmarks.json` | The "Real world" line under each dashboard metric. Empty until you fill it in. |
 | `css/theme.css` | The colour palette and font. |
-| `js/config.js` | Team names, timings, seller/buyer split, term sheets per seller, points, how hard the incumbents fight (`rivals`), Supabase connection. |
+| `js/config.js` | Team names, timings, seller/buyer split, term sheets per seller, points, resource tokens (`tokens`), how hard the incumbents fight (`rivals`), Supabase connection. |
 | `js/facts.js` | The research figures, cases, playbook and APA reference list shown on the slides. Never add a number without its source. |
 | `deck.html` | The slides themselves. |
 | `art/` | The illustrations (made with Higgsfield in one print style). |
@@ -125,5 +143,5 @@ plays one real-time game against the live database (about a minute).
 
 ## Database
 
-`supabase/schema.sql`, then `supabase/002_face_to_face.sql`, then `supabase/003_rivals.sql` is the full database: private tables plus the `sim_*` functions that phones call.
+`supabase/schema.sql`, then `supabase/002_face_to_face.sql`, `supabase/003_rivals.sql` and `supabase/004_tokens.sql` is the full database: private tables plus the `sim_*` functions that phones call.
 Phones can never read a table directly, so hidden card information stays hidden.

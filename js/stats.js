@@ -113,8 +113,34 @@
       noProof: failRate(resolved.filter(function (r) { return r.s.card.assets.length === 0; }))
     };
 
+    // --- did the seller know what the buyer wanted, and did giving more win more? ---
+    var E = B2B.engine, cfg = root.B2B_CONFIG || {};
+    function fits(r) { var f = E.fit(r.b.card, r.o, r.s.pub, cfg); return f.priorityMet && f.constraintMet; }
+    function spent(r) { return E.offerCost(r.s.card, r.o); }
+    var recorded = rows.filter(function (r) { return r.o.guess; });
+    var read = {
+      on: recorded.length > 0,
+      bars: [
+        { key: "right", label: "Knew what the buyer cared about", rate: rate(recorded.filter(function (r) { return E.readOf(r.o, r.b.card) === "right"; })) },
+        { key: "wrong", label: "Guessed wrong", rate: rate(recorded.filter(function (r) { return E.readOf(r.o, r.b.card) === "wrong"; })) },
+        { key: "none", label: "Did not ask", rate: rate(recorded.filter(function (r) { return E.readOf(r.o, r.b.card) === "none"; })) }
+      ],
+      viaConnection: recorded.filter(function (r) { return r.conn && E.readOf(r.o, r.b.card) === "right"; }).length,
+      fit: rate(rows.filter(fits)), noFit: rate(rows.filter(function (r) { return !fits(r); }))
+    };
+    var holders = sellers.filter(function (s) { return s.card.tokens; });
+    var load = {
+      on: holders.length > 0,
+      budget: holders.length ? holders[0].card.tokens.budget : null,
+      bars: [
+        { key: "light", label: "0 or 1 token", rate: rate(rows.filter(function (r) { return spent(r) <= 1; })) },
+        { key: "mid", label: "2 or 3 tokens", rate: rate(rows.filter(function (r) { return spent(r) === 2 || spent(r) === 3; })) },
+        { key: "heavy", label: "4 or more tokens", rate: rate(rows.filter(function (r) { return spent(r) >= 4; })) }
+      ],
+      avg: avg(rows.map(spent)), avgWon: avg(wins.map(spent))
+    };
+
     // --- the incumbents' account managers ---
-    var E = B2B.engine;
     function made(b) { return E.counters(b.card); }
     function took(b) { return b.decision === "incumbent" ? E.standing(b.card, b.stay_level) : null; }
     var pitched = buyers.filter(function (b) { return rows.some(function (r) { return r.b.id === b.id; }); });
@@ -136,7 +162,7 @@
     };
 
     return {
-      defence: defence,
+      defence: defence, read: read, load: load,
       simulated: full.players.filter(function (p) { return p.is_bot; }).length,
       counts: { players: players.length, sellers: sellers.length, buyers: buyers.length, offers: rows.length, deals: wins.length },
       quick: quick, byConnType: byConnType, pilot: pilot, proof: proof, price: price,
@@ -164,7 +190,8 @@
       "proof_pilot_ready", "status", "accepted", "reject_reason", "decided_at", "decided_seconds_from_market_open",
       "delivered", "seller_true_reliability", "buyer_hidden_priority", "buyer_boss_constraint", "fits_priority",
       "meets_boss_constraint", "cheapest_offer_buyer_received", "seller_exit_answer", "buyer_exit_answer",
-      "seller_simulated", "buyer_simulated", "incumbent_counter_offers_to_buyer", "buyer_took_incumbent_counter_offer"];
+      "seller_simulated", "buyer_simulated", "incumbent_counter_offers_to_buyer", "buyer_took_incumbent_counter_offer",
+      "fast_track", "tokens_on_term_sheet", "seller_read_of_buyer", "seller_read_was"];
     var rows = offerRows(full);
     var lines = rows.map(function (r) {
       var o = r.o, f = E.fit(r.b.card, o, r.s.pub, cfg), proof = o.proof || [];
@@ -175,7 +202,9 @@
         yn(proof.indexOf("security_cert") >= 0), yn(proof.indexOf("pilot_ready") >= 0), o.status, yn(r.won), o.reason,
         iso(o.decided_at), o.decided_t, yn(o.delivered), r.s.card.reliability, r.b.card.priority, r.b.card.constraint.text,
         yn(f.priorityMet), yn(f.constraintMet), yn(o.price === min), r.s.exit_answer, r.b.exit_answer, yn(r.s.is_bot), yn(r.b.is_bot),
-        E.counters(r.b.card).length, yn(r.b.decision === "incumbent" && !!E.standing(r.b.card, r.b.stay_level))];
+        E.counters(r.b.card).length, yn(r.b.decision === "incumbent" && !!E.standing(r.b.card, r.b.stay_level)),
+        yn(!!o.fast), r.s.card.tokens ? E.offerCost(r.s.card, o) : "", o.guess === "none" ? "did not ask" : o.guess ? cards.priorities[o.guess] || o.guess : "",
+        o.guess ? E.readOf(o, r.b.card) : ""];
     });
     return toCsv(header, lines);
   }

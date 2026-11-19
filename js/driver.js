@@ -160,7 +160,9 @@
       var r = bots.rnd, pl = bots.plans[p.id];
       if (pl) return pl;
       if (p.role === "seller") {
-        pl = { sendAt: [0.04 + r() * 0.3, 0.2 + r() * 0.4, 0.4 + r() * 0.42].sort(), sent: 0, seen: {}, nextAnswer: 0 };
+        // asks: does this seller find out what a buyer needs before writing the term sheet? told: what each buyer said.
+        pl = { sendAt: [0.04 + r() * 0.3, 0.2 + r() * 0.4, 0.4 + r() * 0.42].sort(), sent: 0, seen: {}, nextAnswer: 0,
+               asks: r() < 0.55, told: {}, loads: r() < 0.6 };
       } else {
         pl = { wake: 0.18 + r() * 0.35, giveUp: 0.74 + r() * 0.22, nextLook: 0, scores: {}, reason: null, abstain: r() < 0.12 };
       }
@@ -173,12 +175,13 @@
       var conn = buyer.card.connections.filter(function (c) { return c.id === o.seller_id; })[0];
       var risky = buyer.card.priority === "lowest_risk";
       var hard = (o.proof || []).filter(function (a) { return a !== "pilot_ready"; }).length;
+      // What fits the buyer counts for most. Other extras still reassure a little: proof and a pilot make failure less likely or less costly.
       var parts = {
         price: f.savingsPct * (buyer.card.priority === "lowest_cost" ? 1.4 : 0.8),
-        proof: hard * 12 * (risky ? 1.5 : 1),
-        pilot: o.pilot ? 14 * (risky ? 1.5 : 1) : 0,
+        proof: hard * 7 * (risky ? 1.5 : 1),
+        pilot: o.pilot ? 9 * (risky ? 1.5 : 1) : 0,
         trust: conn ? 6 + (conn.reliability - 0.75) * 100 : -3,
-        fit: (f.priorityMet ? 12 : 0) + (f.constraintMet ? 0 : -40)
+        fit: (f.priorityMet ? 26 : 0) + (f.constraintMet ? 0 : -40)
       };
       var total = f.overBudget ? -999 : parts.price + parts.proof + parts.pilot + parts.trust + parts.fit + (bots.rnd() * 16 - 8);
       var top = Object.keys(parts).sort(function (a, b) { return parts[b] - parts[a]; })[0];
@@ -187,45 +190,96 @@
       return { total: total, top: top, why: why };
     },
 
-    sellerOffer: function (ctx, hs, s) {
-      var r = bots.rnd;
+    // What a seller knows about a buyer: through a connection, or because it asked and the buyer answered.
+    learn: function (s, b, pl) {
+      var k = s.card.connections.filter(function (c) { return c.id === b.id; })[0];
+      if (k) return { priority: k.priority, constraint: k.constraint, via: "connection" };
+      if (!pl.asks) return null;
+      if (pl.told[b.id] == null) pl.told[b.id] = bots.rnd() < 0.85;     // most buyers answer a direct question
+      return pl.told[b.id] ? { priority: b.card.priority, constraint: b.card.constraint, via: "asked" } : null;
+    },
+
+    // Can this seller ever satisfy the boss's rule? If not, a seller who asked walks away and saves the term sheet.
+    canServe: function (s, b, info, cfg) {
+      var c = info.constraint || {}, T = s.card.tokens;
+      if (c.type === "requires_proof") return s.card.assets.indexOf(c.proof) >= 0;
+      if (c.type === "max_deploy_weeks") return s.card.deployWeeks <= c.weeks || !!(T && T.fastWeeks <= c.weeks);
+      if (c.type === "min_savings") return s.card.floor <= b.card.incumbent.price * (1 - c.pct / 100);
+      return true;
+    },
+
+    sellerOffer: function (ctx, hs, s, pl) {
+      var r = bots.rnd, cfg = ctx.cfg, T = s.card.tokens;
       var mine = hs.offers.filter(function (o) { return o.seller_id === s.id; });
       var open = hs.players.filter(function (b) { return b.role === "buyer" && b.category === s.category && !b.decision; });
       if (!open.length) return null;
       var fresh = open.filter(function (b) { return !mine.some(function (o) { return o.buyer_id === b.id; }); });
       var revised = !fresh.length;
       var pool = revised ? open : fresh;
+      // Qualify: drop buyers this seller knows it cannot serve, when there is anyone else to pitch.
+      var worth = pool.filter(function (b) { var i = bots.learn(s, b, pl); return !i || bots.canServe(s, b, i, cfg); });
+      if (worth.length && r() < 0.8) pool = worth;
       var known = pool.filter(function (b) { return s.card.connections.some(function (c) { return c.id === b.id; }); });
       var target = known.length && r() < 0.85 ? E.pick(known, r) : E.pick(pool, r);
-      var info = s.card.connections.filter(function (c) { return c.id === target.id; })[0];
-      var frac = 0.35 + r() * 0.65;
-      if (info && (info.priority === "lowest_cost" || info.constraint.type === "min_savings")) frac = r() * 0.35;
+      var info = bots.learn(s, target, pl);
+      var open2 = mine.filter(function (o) { return o.buyer_id === target.id && o.status === "pending"; })[0];
+      var free = E.tokensFree(s.card, mine, open2 && open2.id);
+      var terms = open2 ? { pilot: !!open2.pilot, fast: !!open2.fast, proof: (open2.proof || []).filter(function (a) { return a !== "pilot_ready"; }) }
+                        : { pilot: false, fast: false, proof: [] };
+      // Add one extra if the tokens are there.
+      function add(kind, asset) {
+        var t = { pilot: terms.pilot, fast: terms.fast, proof: terms.proof.slice() };
+        if (kind === "pilot") t.pilot = true;
+        else if (kind === "fast") { if (!T || s.card.deployWeeks <= T.fastWeeks) return false; t.fast = true; }
+        else { if (s.card.assets.indexOf(asset) < 0 || t.proof.indexOf(asset) >= 0) return false; t.proof.push(asset); }
+        if (E.offerCost(s.card, t) > free) return false;
+        terms = t;
+        return true;
+      }
+      var frac = 0.35 + r() * 0.65, cap = Infinity, guess;
+      if (info) {
+        // Tailor: first the boss's rule, then the priority.
+        var c = info.constraint || {}, inc = target.card.incumbent.price;
+        if (c.type === "requires_pilot") add("pilot");
+        else if (c.type === "requires_proof") add("proof", c.proof);
+        else if (c.type === "max_deploy_weeks" && s.card.deployWeeks > c.weeks) add("fast");
+        else if (c.type === "min_savings") cap = Math.min(cap, Math.floor(inc * (1 - c.pct / 100)));
+        if (info.priority === "lowest_risk") { if (!terms.pilot && terms.proof.indexOf("reference") < 0) { if (!add("proof", "reference")) add("pilot"); } }
+        else if (info.priority === "fastest_deployment") { if (s.card.deployWeeks > cfg.priorityRules.fastestDeployWeeks) add("fast"); }
+        else if (info.priority === "lowest_cost") { cap = Math.min(cap, Math.floor(inc * (1 - cfg.priorityRules.lowestCostSavingsPct / 100))); frac = r() * 0.35; }
+        if (r() < 0.3) add("proof", E.pick(["reference", "security_cert"], r));       // a little extra reassurance
+        guess = info.priority;
+      } else {
+        // Did not ask: guess, and pile on whatever the tokens allow.
+        var extras = E.shuffle([["pilot"], ["fast"], ["proof", "reference"], ["proof", "security_cert"]], r);
+        extras.forEach(function (x) { if (pl.loads || r() < 0.45) add(x[0], x[1]); });
+        guess = r() < 0.6 ? "none" : E.pick(["lowest_cost", "lowest_risk", "fastest_deployment"], r);
+      }
       if (revised) frac *= 0.5;
       var price = Math.round(s.card.floor + (s.card.list - s.card.floor) * frac);
-      var hasPilot = s.card.assets.indexOf("pilot_ready") >= 0;
-      var pilot = hasPilot ? r() < 0.7 : r() < 0.15;
-      if (info && (info.constraint.type === "requires_pilot" || (info.priority === "lowest_risk" && r() < 0.8))) pilot = true;
-      var proof = s.card.assets.slice();
-      if (proof.length && r() > 0.9) proof.splice(Math.floor(r() * proof.length), 1);
-      var open2 = mine.filter(function (o) { return o.buyer_id === target.id && o.status === "pending"; })[0];
-      if (open2) return ctx.api.revise(ctx.code, s.token, open2.id, Math.min(open2.price, price), pilot || open2.pilot, proof);
-      return ctx.api.offer(ctx.code, s.token, target.id, price, pilot, proof, target.card.desk);
+      price = Math.max(s.card.floor, Math.min(price, cap));
+      var more = { fast: terms.fast, guess: guess };
+      if (open2) return ctx.api.revise(ctx.code, s.token, open2.id, Math.min(open2.price, price), terms.pilot, terms.proof, more);
+      return ctx.api.offer(ctx.code, s.token, target.id, price, terms.pilot, terms.proof, target.card.desk, more);
     },
 
     // A seller hears that the incumbent has countered, and improves the open term sheet.
     sellerAnswer: function (ctx, hs, s, pl) {
       var r = bots.rnd, job = null;
-      hs.offers.forEach(function (o) {
-        if (job || o.seller_id !== s.id || o.status !== "pending") return;
+      var mine = hs.offers.filter(function (o) { return o.seller_id === s.id; });
+      mine.forEach(function (o) {
+        if (job || o.status !== "pending") return;
         var b = hs.players.filter(function (x) { return x.id === o.buyer_id; })[0];
         var n = b && b.pub && b.pub.defence ? b.pub.defence.n : 0;
         if (!n || pl.seen[o.id] === n) return;
         pl.seen[o.id] = n;
         if (r() > 0.75) return;                                  // some sellers never hear about it
         var price = Math.round(o.price - (o.price - s.card.floor) * (0.3 + r() * 0.5));
-        var pilot = o.pilot || s.card.assets.indexOf("pilot_ready") >= 0 || r() < 0.4;
-        if (price === o.price && pilot === o.pilot) return;
-        job = ctx.api.revise(ctx.code, s.token, o.id, price, pilot, s.card.assets.slice());
+        var pilot = !!o.pilot;
+        if (!pilot && (s.card.assets.indexOf("pilot_ready") >= 0 || r() < 0.4) &&
+            E.offerCost(s.card, { pilot: true, fast: o.fast, proof: o.proof }) <= E.tokensFree(s.card, mine, o.id)) pilot = true;
+        if (price === o.price && pilot === !!o.pilot) return;
+        job = ctx.api.revise(ctx.code, s.token, o.id, price, pilot, o.proof || [], { fast: !!o.fast, guess: o.guess });
       });
       return job;
     },
@@ -244,7 +298,7 @@
       var threshold = 84 - 20 * frac + stayGain * 0.9;
       // An edited term sheet is scored again.
       pending.forEach(function (o) {
-        var key = o.price + ":" + (o.pilot ? 1 : 0) + ":" + (o.proof || []).length;
+        var key = o.price + ":" + (o.pilot ? 1 : 0) + ":" + (o.proof || []).length + (o.fast ? ":f" : "");
         if (pl.scores[o.id].key !== key) { pl.scores[o.id] = bots.scoreOffer(b, o, byId[o.seller_id].pub, ctx.cfg); pl.scores[o.id].key = key; }
       });
       var best = pending.slice().sort(function (x, y) { return pl.scores[y.id].total - pl.scores[x.id].total; })[0];
@@ -292,7 +346,7 @@
           if (p.role === "seller") {
             if (p.offers_left > 0 && pl.sent < pl.sendAt.length && frac >= pl.sendAt[pl.sent]) {
               pl.sent++;
-              job = bots.sellerOffer(ctx, hs, p);
+              job = bots.sellerOffer(ctx, hs, p, pl);
             } else if (hs.now >= pl.nextAnswer) {
               pl.nextAnswer = hs.now + (4000 + bots.rnd() * 6000) / fast;
               job = bots.sellerAnswer(ctx, hs, p, pl);

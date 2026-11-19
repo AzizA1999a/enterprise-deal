@@ -67,8 +67,10 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     }
     if (!faceTested && hs.game.phase === "open") {                            // desk number, edit, sign-what-you-saw
       faceTested = true;
-      const seller = hs.players.find(p => p.role === "seller" && p.offers_left > 0);
-      const buyer = hs.players.find(p => p.role === "buyer" && p.category === seller.category && !p.decision);
+      // simulated players only: the host is given their tokens, never a real player's
+      const seller = hs.players.find(p => p.role === "seller" && p.token && p.offers_left > 0 &&
+        hs.players.some(b => b.role === "buyer" && b.token && b.category === p.category && !b.decision));
+      const buyer = hs.players.find(p => p.role === "buyer" && p.token && p.category === seller.category && !p.decision);
       assert.ok(/^\d{2}$/.test(buyer.card.desk), "buyer has a 2-digit desk number");
       const sellerView = await api.state(code, seller.token);
       assert.ok(!JSON.stringify(sellerView.buyers).includes('"desk"'), "sellers cannot read desk numbers");
@@ -82,14 +84,36 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
       assert.strictEqual(seen.price, seller.card.floor); assert.strictEqual(seen.revisions, 1); assert.strictEqual(seen.pilot, true);
       await assert.rejects(api.decide(code, buyer.token, made.id, true, null, seller.card.list), e => e.code === "offer_changed");
       console.log("face-to-face rules OK (desk number, edit, sign-what-you-saw)");
+      // resource tokens: the database prices each term sheet and refuses one the seller cannot afford
+      const T = seller.card.tokens, E = B2B.engine;
+      assert.ok(T && T.budget === cfg.tokens.perSeller, "the seller's card carries the token rules");
+      assert.strictEqual(seen.cost, T.pilot, "a pilot costs the seller its pilot price in tokens");
+      await api.revise(code, seller.token, made.id, seller.card.floor, true, [], { fast: true, guess: "lowest_risk" });
+      let mine = (await api.state(code, seller.token)).offers;
+      const now = mine.find(o => o.id === made.id);
+      assert.deepStrictEqual([now.fast, now.guess, now.cost], [true, "lowest_risk", T.pilot + T.fast], "fast-track and the seller's read are stored and priced");
+      const other = hs.players.find(p => p.role === "buyer" && p.token && p.category === seller.category && !p.decision && p.id !== buyer.id &&
+        !mine.some(o => o.buyer_id === p.id && o.status === "pending"));
+      if (other) {
+        const free = E.tokensFree(seller.card, mine);
+        if (free < T.pilot + T.fast) {
+          await assert.rejects(api.offer(code, seller.token, other.id, seller.card.list, true, [], other.card.desk, { fast: true, guess: "none" }), e => e.code === "no_tokens");
+          assert.strictEqual((await api.state(code, seller.token)).me.offers_left, sellerView.me.offers_left - 1, "a refused term sheet does not use one up");
+        }
+      }
+      await api.revise(code, seller.token, made.id, seller.card.floor, true, [], { fast: false });
+      mine = (await api.state(code, seller.token)).offers;
+      assert.strictEqual(mine.find(o => o.id === made.id).guess, "lowest_risk", "an edit keeps the earlier read when none is sent");
+      assert.strictEqual(E.tokensUsed(seller.card, mine), mine.filter(o => o.status === "pending" || o.status === "accepted").reduce((n, o) => n + o.cost, 0));
+      console.log("token rules OK (priced by the database, freed by an edit; refusal when short " + (other ? "tested" : "NOT tested: no second buyer") + ")");
       continue;
     }
     if (!paused && hs.game.phase === "open" && hs.offers.length > 5) {       // pause, extend, resume
       paused = true;
       await api.host(code, pin, "pause");
-      const seller = hs.players.find(p => p.role === "seller" && p.offers_left > 0);
+      const seller = hs.players.find(p => p.role === "seller" && p.token && p.offers_left > 0);   // a simulated one: the host holds its token
       const buyer = hs.players.find(p => p.role === "buyer" && p.category === seller.category);
-      await assert.rejects(api.offer(code, seller.token, buyer.id, seller.card.list, false, []), e => e.code === "not_open");
+      await assert.rejects(api.offer(code, seller.token, buyer.id, seller.card.list, false, []), e => e.code === "not_open" || (console.log("unexpected refusal while paused:", e.code), false));
       await api.host(code, pin, "extend", { ms: 5000 });
       await api.host(code, pin, "resume");
     }
@@ -104,6 +128,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     const sent = hs.offers.filter(o => o.seller_id === s.id);
     assert.ok(sent.length <= cfg.offersPerSeller);
     assert.strictEqual(s.offers_left, cfg.offersPerSeller - sent.length);
+    assert.ok(sent.every(o => o.cost === B2B.engine.offerCost(s.card, o)), "every term sheet's token cost matches its terms");
+    assert.ok(B2B.engine.tokensUsed(s.card, sent) <= s.card.tokens.budget, "no seller ends over its token budget");
   }
   for (const b of buyers) {
     assert.ok(hs.offers.filter(o => o.buyer_id === b.id && o.status === "accepted").length <= 1);

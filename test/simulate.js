@@ -35,6 +35,11 @@ async function playGame(nPlayers, quiet) {
     hs = await api.hostState(code, pin);
     if (await B2B.rivals.tick(ctx, hs)) hs = await api.hostState(code, pin);
     await B2B.bots.tick(ctx, hs);
+    // resource tokens: never more tied up than the seller holds, at any moment
+    for (const s of hs.players) {
+      if (s.role !== "seller" || !s.card.tokens) continue;
+      assert.ok(B2B.engine.tokensUsed(s.card, hs.offers.filter(o => o.seller_id === s.id)) <= s.card.tokens.budget, "a seller never ties up more tokens than it holds");
+    }
     fakeNow += 1000;
     if (hs.game.phase === "locked" && hs.players.every(p => p.exit_answer)) break;
   }
@@ -49,7 +54,11 @@ async function playGame(nPlayers, quiet) {
     const sent = hs.offers.filter(o => o.seller_id === s.id);
     assert.ok(sent.length <= cfg.offersPerSeller, "seller offer limit");
     assert.strictEqual(s.offers_left, cfg.offersPerSeller - sent.length);
+    if (cfg.tokens.on) assert.deepStrictEqual(s.card.tokens, { budget: cfg.tokens.perSeller, pilot: s.card.assets.includes("pilot_ready") ? cfg.tokens.pilotReady : cfg.tokens.pilot,
+      fast: cfg.tokens.fast, proof: cfg.tokens.proof, fastWeeks: cfg.tokens.fastWeeks }, "token rules are on the seller's card");
     for (const o of sent) {
+      assert.strictEqual(o.cost, B2B.engine.offerCost(s.card, o), "the recorded token cost matches the terms");
+      assert.ok(["lowest_cost", "lowest_risk", "fastest_deployment", "none"].includes(o.guess), "every term sheet records the seller's read of the buyer");
       assert.ok(o.price >= s.card.floor && o.price <= s.card.list, "price in range");
       assert.ok(o.proof.every(a => s.card.assets.includes(a)), "proof held");
       const b = buyers.find(x => x.id === o.buyer_id);
@@ -104,11 +113,55 @@ async function playGame(nPlayers, quiet) {
   return st;
 }
 
+// The token limit, step by step, on one seller with three buyers to pitch.
+async function tokenRules() {
+  if (!cfg.tokens.on) return;
+  for (let attempt = 0; attempt < 60; attempt++) {
+    const pin = "1234", { code } = await api.createGame(pin), ctx = { code, pin, cards, cfg, api };
+    B2B.bots.plans = {}; B2B.rivals.plans = {};
+    await B2B.bots.add(ctx, 40, []);
+    let hs = await api.hostState(code, pin);
+    await B2B.driver.start(ctx, hs);
+    fakeNow += (cfg.briefingSeconds + 1) * 1000;
+    await B2B.driver.tick(ctx, await api.hostState(code, pin));
+    hs = await api.hostState(code, pin);
+    assert.strictEqual(hs.game.phase, "open");
+    const s = hs.players.find(p => p.role === "seller" && !p.card.assets.includes("pilot_ready") && p.card.assets.includes("reference") &&
+      hs.players.filter(b => b.role === "buyer" && b.category === p.category).length >= 3);
+    if (!s) continue;
+    const bs = hs.players.filter(b => b.role === "buyer" && b.category === s.category).slice(0, 3);
+    const T = s.card.tokens, send = (b, pilot, proof, fast) => api.offer(code, s.token, b.id, s.card.list, pilot, proof, b.card.desk, { fast: !!fast, guess: "none" });
+    const refuses = async (job, why) => { let err = null; try { await job; } catch (e) { err = e.code; } assert.strictEqual(err, "no_tokens", why); };
+    const o1 = await send(bs[0], true, []);                                   // pilot: 3 of 6
+    const o2 = await send(bs[1], true, []);                                   // pilot: 6 of 6
+    await refuses(send(bs[2], true, []), "a third pilot is refused: no tokens left");
+    await refuses(api.revise(code, s.token, o2.id, s.card.list, true, ["reference"], { guess: "none" }), "an edit that needs more tokens than are free is refused");
+    hs = await api.hostState(code, pin);
+    assert.strictEqual(hs.players.find(p => p.id === s.id).offers_left, cfg.offersPerSeller - 2, "a refused term sheet does not use one up");
+    assert.strictEqual(B2B.engine.tokensFree(s.card, hs.offers.filter(o => o.seller_id === s.id)), T.budget - 2 * T.pilot);
+    await api.revise(code, s.token, o2.id, s.card.list, false, ["reference"], { guess: "lowest_risk" });   // swap the pilot for a reference: frees 2
+    await api.decide(code, bs[0].token, o1.id, false, "price");               // a rejection gives the tokens back
+    const o3 = await send(bs[2], true, ["reference"]);                        // pilot + reference: 4, with 1 tied up elsewhere
+    hs = await api.hostState(code, pin);
+    const mine = hs.offers.filter(o => o.seller_id === s.id);
+    assert.strictEqual(mine.find(o => o.id === o2.id).guess, "lowest_risk");
+    assert.strictEqual(mine.find(o => o.id === o3.id).cost, T.pilot + T.proof);
+    assert.strictEqual(B2B.engine.tokensFree(s.card, mine), T.budget - T.proof - (T.pilot + T.proof));
+    // fast-track counts for the buyer: a slow start-up meets a "4 weeks" need only with it
+    const slow = { deployWeeks: cfg.tokens.fastWeeks + 2 }, bc = { incumbent: { price: 100 }, priority: "fastest_deployment", constraint: { type: "max_deploy_weeks", weeks: cfg.tokens.fastWeeks } };
+    assert.deepStrictEqual([B2B.engine.fit(bc, { price: 90, proof: [] }, slow, cfg).priorityMet, B2B.engine.fit(bc, { price: 90, proof: [], fast: true }, slow, cfg).priorityMet], [false, true]);
+    assert.strictEqual(B2B.engine.fit(bc, { price: 90, proof: [], fast: true }, slow, cfg).constraintMet, true);
+    return true;
+  }
+  throw new Error("token rules: no suitable seller found in 60 games");
+}
+
 (async () => {
   const n = Number(process.argv[2] || 28), games = Number(process.argv[3] || 1);
+  await tokenRules();
   if (games === 1) { await playGame(n, false); console.log("OK"); return; }
   if (process.argv[4] === "norivals") cfg.rivals.on = false;
-  const acc = { withC: [0, 0], without: [0, 0], inc: [0, 0], notCheap: [0, 0], offers: 0, deals: 0, fail: [0, 0], d: { counters: 0, pitched: 0, signed: 0, wonBack: 0, early: 0, notPitched: 0, disc: [], lev: 0 }, noWin: [0, 0], price: [] };
+  const acc = { withC: [0, 0], without: [0, 0], inc: [0, 0], notCheap: [0, 0], offers: 0, deals: 0, fail: [0, 0], d: { counters: 0, pitched: 0, signed: 0, wonBack: 0, early: 0, notPitched: 0, disc: [], lev: 0 }, noWin: [0, 0], price: [], read: { right: [0, 0], wrong: [0, 0], none: [0, 0] }, load: { light: [0, 0], mid: [0, 0], heavy: [0, 0] }, fit: [0, 0], noFit: [0, 0], tok: [] };
   for (let i = 0; i < games; i++) {
     const s = await playGame(n, true);
     acc.withC[0] += s.quick.connWith.won; acc.withC[1] += s.quick.connWith.n;
@@ -123,6 +176,10 @@ async function playGame(nPlayers, quiet) {
     if (d.avgDiscount != null) acc.d.disc.push(d.avgDiscount);
     acc.noWin[0] += s.firstWin.noWin; acc.noWin[1] += s.firstWin.sellers;
     if (s.price.win != null) acc.price.push(s.price.win);
+    s.read.bars.forEach(b => { acc.read[b.key][0] += b.rate.won; acc.read[b.key][1] += b.rate.n; });
+    s.load.bars.forEach(b => { acc.load[b.key][0] += b.rate.won; acc.load[b.key][1] += b.rate.n; });
+    acc.fit[0] += s.read.fit.won; acc.fit[1] += s.read.fit.n; acc.noFit[0] += s.read.noFit.won; acc.noFit[1] += s.read.noFit.n;
+    if (s.load.avg != null) acc.tok.push(s.load.avg);
   }
   const pct = a => (100 * a[0] / a[1]).toFixed(0) + "% (" + a[0] + "/" + a[1] + ")";
   console.log(`${games} games of ${n} players — all invariants held`);
@@ -134,4 +191,7 @@ async function playGame(nPlayers, quiet) {
   console.log("account managers:", cfg.rivals.on ? "ON" : "off", "| counter-offers per game:", (acc.d.counters / games).toFixed(1),
     "| pitched buyers won back:", pct([acc.d.wonBack, acc.d.pitched]), "| pitched buyers who signed:", pct([acc.d.signed, acc.d.pitched]),
     "| never-pitched buyers closed early:", acc.d.notPitched ? pct([acc.d.early, acc.d.notPitched]) : "-", "| average discount accepted:", mean(acc.d.disc) + "%");
+  console.log("knew what the buyer cared about:", pct(acc.read.right), "| guessed wrong:", pct(acc.read.wrong), "| did not ask:", pct(acc.read.none));
+  console.log("term sheets that fit priority and rule:", pct(acc.fit), "| the rest:", pct(acc.noFit));
+  console.log("tokens on the term sheet, 0-1:", pct(acc.load.light), "| 2-3:", pct(acc.load.mid), "| 4+:", pct(acc.load.heavy), "| average per term sheet:", mean(acc.tok));
 })().catch(e => { console.error(e); process.exit(1); });

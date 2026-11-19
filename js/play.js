@@ -73,10 +73,15 @@
     return html + "</div>";
   }
 
+  function shown(o) { return (o.proof || []).filter(function (a) { return a !== "pilot_ready"; }); }
   function offerTerms(o) {
-    return '<div class="chips">' + (o.pilot ? '<span class="chip good">Pilot included</span>' : "") + proofChips(o.proof) +
-      (!o.pilot && !(o.proof || []).length ? '<span class="chip grey">No proof shown</span>' : "") + "</div>";
+    return '<div class="chips">' + (o.pilot ? '<span class="chip good">Pilot included</span>' : "") +
+      (o.fast ? '<span class="chip good">Fast-track: live in ' + cfg.tokens.fastWeeks + " weeks</span>" : "") + proofChips(shown(o)) +
+      (!o.pilot && !o.fast && !shown(o).length ? '<span class="chip grey">Nothing added</span>' : "") + "</div>";
   }
+  // ---------- resource tokens (sellers) ----------
+  function tok(n) { return n + (n === 1 ? " token" : " tokens"); }
+  function dots(free, total) { return "●".repeat(Math.max(0, free)) + "○".repeat(Math.max(0, total - free)); }
 
   // ---------- role cards ----------
   function sellerCard(c) {
@@ -91,11 +96,18 @@
       "<p>Deploys in <b>" + c.deployWeeks + " weeks</b>. Prices are per year.</p></div>" +
       '<div class="card stack"><div class="label">Your proof</div>' +
       (c.assets.length ? '<div class="chips">' + proofChips(c.assets) + "</div>" : "<p><b>None.</b> You are selling on a promise.</p>") + "</div>" +
+      (c.tokens ? '<div class="card stack"><div class="label">Your resources</div><div class="row"><div class="bigname num">' + tok(c.tokens.budget) + '</div><div class="dots bigname" aria-hidden="true">' + dots(c.tokens.budget, c.tokens.budget) + "</div></div>" +
+        "<p>Your team is small. Everything you add to a term sheet ties up tokens:</p>" +
+        '<table class="breakdown"><tr><td>A pilot' + (c.assets.indexOf("pilot_ready") >= 0 ? " (you are pilot-ready)" : "") + '</td><td class="num">' + c.tokens.pilot + "</td></tr>" +
+        (c.deployWeeks > c.tokens.fastWeeks ? "<tr><td>Fast-track: live in " + c.tokens.fastWeeks + ' weeks</td><td class="num">' + c.tokens.fast + "</td></tr>" : "") +
+        E.showable(c).map(function (a) { return "<tr><td>Show your " + label("proofs", a).toLowerCase() + '</td><td class="num">' + c.tokens.proof + "</td></tr>"; }).join("") + "</table>" +
+        '<p class="muted">You cannot give everything to everyone. Tokens come back if a buyer says no.</p></div>' : "") +
       '<div class="card stack"><div class="label">People you know</div>' +
       (conns || "<p><b>Nobody.</b> You are selling cold: you cannot see any buyer's priority.</p>") + "</div>" +
-      '<div class="card note stack"><div class="label">Rules</div><p><b>Walk over and talk.</b> When a buyer is interested, ask for their desk number and write the term sheet together. You can open <b>' + cfg.offersPerSeller + " term sheets</b> in the whole game, and edit one until it is signed or rejected.</p>" +
+      '<div class="card note stack"><div class="label">Rules</div><p><b>Ask before you offer.</b> Each buyer has a hidden priority and a rule from their boss. What they do not need is wasted on them' + (c.tokens ? ", and it still ties up your tokens" : "") + ".</p>" +
+      "<p><b>Then write the term sheet together.</b> Ask for their desk number. You can open <b>" + cfg.offersPerSeller + " term sheets</b> in the whole game, and edit one until it is signed or rejected.</p>" +
       (cfg.rivals && cfg.rivals.on ? '<p><b>You are not alone at the table.</b> Every buyer has an incumbent, and its account manager will answer your term sheet with a counter-offer. Ask the buyer what they were offered, then improve your terms.</p>' : "") +
-      '<p class="muted">Each delivered deal scores ' + P.sellerDeal + " points, plus up to " + P.sellerPriceHeld + " for keeping your price near list. A pilot costs you " + P.sellerPilotCost + ' points unless you are pilot-ready.</p></div>';
+      '<p class="muted">Each delivered deal scores ' + P.sellerDeal + " points, plus up to " + P.sellerPriceHeld + " for keeping your price near list." + (c.tokens ? "" : " A pilot costs you " + P.sellerPilotCost + " points unless you are pilot-ready.") + "</p></div>";
   }
   function buyerCard(c) {
     var P = cfg.points;
@@ -107,11 +119,11 @@
       '<div class="kv"><div><div class="label">Budget</div><div class="v num">' + money(c.budget) + '</div></div><div><div class="label">Incumbent price</div><div class="v num">' + money(c.incumbent.price) + "</div></div></div>" +
       "<p>Your incumbent is <b>" + esc(c.incumbent.name) + "</b>. Staying is always possible and carries zero risk." +
       (cfg.rivals && cfg.rivals.on ? " Their account manager will fight to keep you: any counter-offer is real, and you can use it to negotiate." : "") + "</p></div>" +
-      '<div class="card stack"><div class="label">Hidden priority (keep it to yourself)</div><div class="bigname">' + label("priorities", c.priority) + '</div><p class="muted">' + esc(E.priorityRule(c.priority, cfg)) + "</p>" +
+      '<div class="card stack"><div class="label">Hidden priority (sellers cannot see it)</div><div class="bigname">' + label("priorities", c.priority) + '</div><p class="muted">' + esc(E.priorityRule(c.priority, cfg)) + "</p>" +
       '<div class="label" style="margin-top:14px">Your boss\'s rule</div><p><b>' + esc(c.constraint.text) + "</b></p></div>" +
       '<div class="card warn stack"><div class="label" style="color:var(--bad)">Career risk</div><p><b>' + esc(S.cards.riskRule) + "</b></p></div>" +
       '<div class="card stack"><div class="label">People you know</div>' + (conns || "<p><b>Nobody.</b> You cannot check any start-up's real reliability.</p>") + "</div>" +
-      '<div class="card note stack"><div class="label">Rules</div><p><b>Sellers will come to you.</b> Listen, push back, negotiate out loud.' + (c.desk ? " Give a seller your desk number <b>" + esc(c.desk) + "</b> only when you want their term sheet on your phone." : "") + " You can sign <b>1 deal</b>, or stay with your incumbent.</p>" +
+      '<div class="card note stack"><div class="label">Rules</div><p><b>Sellers will come to you.</b> Listen, push back, negotiate out loud. A start-up cannot give you everything, so a seller who never asks what you need will bring you the wrong offer. You decide how much to tell.' + (c.desk ? " Give a seller your desk number <b>" + esc(c.desk) + "</b> only when you want their term sheet on your phone." : "") + " You can sign <b>1 deal</b>, or stay with your incumbent.</p>" +
       '<p class="muted">Staying scores ' + P.incumbent + " points" + (cfg.rivals && cfg.rivals.on ? ", plus 1 per 1% your incumbent takes off if you accept its counter-offer before the close" : "") + ". A start-up that delivers scores " + P.startupBase + ", plus 1 per 1% saved (up to " + P.savingsCap + "), plus " + P.priorityBonus + " if it fits your priority, minus " + P.constraintPenalty + " if it breaks your boss's rule.</p></div>";
   }
   function roleCard(me) { return me.role === "seller" ? sellerCard(me.card) : buyerCard(me.card); }
@@ -131,9 +143,11 @@
     var me = st.me, open = st.game.phase === "open";
     var conn = {};
     me.card.connections.forEach(function (c) { conn[c.id] = c; });
-    var left = me.offers_left, total = cfg.offersPerSeller;
-    var html = '<div class="card row"><div><div class="label">Term sheets left</div><div class="bigname num">' + left + " of " + total + '</div></div><div class="dots bigname" aria-hidden="true">' +
-      "●".repeat(Math.max(0, left)) + "○".repeat(Math.max(0, total - left)) + "</div></div>";
+    var left = me.offers_left, total = cfg.offersPerSeller, T = me.card.tokens;
+    var html = '<div class="card stack"><div class="row"><div><div class="label">Term sheets left</div><div class="bigname num">' + left + " of " + total + '</div></div><div class="dots bigname" aria-hidden="true">' + dots(left, total) + "</div></div>" +
+      (T ? '<div class="row"><div><div class="label">Tokens free</div><div class="bigname num">' + E.tokensFree(me.card, st.offers) + " of " + T.budget + '</div></div><div class="dots bigname" aria-hidden="true">' + dots(E.tokensFree(me.card, st.offers), T.budget) + "</div></div>" : "") + "</div>" +
+      '<div class="card note stack"><div class="label">How to win a buyer</div><ol class="steps"><li><b>Find</b> a buyer in your category.</li><li><b>Ask</b> before you offer:<ul>' +
+      (S.cards.askFirst || []).map(function (q) { return "<li>" + esc(q) + "</li>"; }).join("") + "</ul></li><li><b>Build</b> a term sheet that fits what you heard.</li><li><b>Sign:</b> get their desk number and send it.</li></ol></div>";
     function rank(b) { return b.decided ? 2 : conn[b.id] ? 0 : 1; }
     var buyers = st.buyers.slice().sort(function (a, b) { return rank(a) - rank(b) || a.name.localeCompare(b.name); });
     buyers.forEach(function (b) {
@@ -145,7 +159,8 @@
         "<p>Needs: " + esc(b.pub.need) + "</p>" +
         (b.pub.defence && !b.decided ? '<div class="card rivalnote"><p><b>' + esc(b.pub.defence.by) + "</b> has made " + (b.pub.defence.n === 1 ? "a counter-offer" : b.pub.defence.n + " counter-offers") + ". Ask what they were offered, then beat it.</p></div>" : "") +
         (k ? '<div class="card note"><p>Hidden priority: <b>' + label("priorities", k.priority) + "</b></p><p>Boss's rule: <b>" + esc(k.constraint.text) + "</b></p></div>" : "") +
-        mine.map(function (o) { return '<div class="row"><span class="num"><b>' + money(o.price) + "</b>" + (o.pilot ? " + pilot" : "") + "</span>" + statusChip(o) + "</div>"; }).join("") +
+        mine.map(function (o) { return '<div class="row"><span class="num"><b>' + money(o.price) + "</b>" + (o.pilot ? " + pilot" : "") + (o.fast ? " + fast-track" : "") +
+          (T && (o.status === "pending" || o.status === "accepted") && E.offerCost(me.card, o) ? ' <span class="muted">· ' + tok(E.offerCost(me.card, o)) + "</span>" : "") + "</span>" + statusChip(o) + "</div>"; }).join("") +
         (function () {
           var pending = mine.filter(function (o) { return o.status === "pending"; })[0];
           if (b.decided) return '<span class="chip grey">Has decided</span>';
@@ -181,7 +196,7 @@
       '<div class="row"><div><div class="bigname">' + esc(o.seller.pub.org) + '</div><div class="muted">from ' + esc(o.seller.name) + '</div></div><div style="text-align:right"><div class="price num">' + money(o.price) + '</div><div class="muted num">' +
       (sav >= 0 ? sav + "% under incumbent" : -sav + "% over incumbent") + "</div></div></div>" +
       "<p>" + esc(o.seller.pub.tagline) + "</p>" + offerTerms(o) + (o.revisions ? '<div><span class="chip plain">Edited ' + o.revisions + (o.revisions === 1 ? " time" : " times") + "</span></div>" : "") +
-      '<p class="muted">Deploys in ' + o.seller.pub.deployWeeks + " weeks.</p>" +
+      '<p class="muted">Deploys in ' + E.deployWeeks(o, o.seller.pub, cfg) + " weeks" + (o.fast ? " (fast-track)" : "") + ".</p>" +
       (k ? '<div class="card note"><p>You know the truth: this start-up <b>' + reliabilityText(k.reliability) + "</b>.</p></div>" : "") +
       (closed ? "<div>" + statusChip(o) + "</div>" :
         '<div class="stack"><div class="check ' + (f.priorityMet ? "ok" : "no") + '">' + (f.priorityMet ? "✓ Fits" : "✗ Does not fit") + " your priority (" + label("priorities", c.priority) + ")</div>" +
@@ -309,23 +324,39 @@
     var me = st.me, html = "";
     if (sh.type === "offer") {
       var b = st.buyers.filter(function (x) { return x.id === sh.buyerId; })[0];
-      var c = me.card, ready = c.assets.indexOf("pilot_ready") >= 0;
+      var c = me.card, ready = c.assets.indexOf("pilot_ready") >= 0, T = c.tokens;
       if (!b) { S.sheet = null; sheetEl.__html = sheetEl.innerHTML = ""; return; }
+      var known = c.connections.filter(function (k) { return k.id === b.id; })[0];
+      var free = E.tokensFree(c, st.offers, sh.offerId), cost = E.offerCost(c, sh), left = free - cost;
+      // One extra on the term sheet: a tick box with its price in tokens. It cannot be ticked when the tokens are not there.
+      function extra(on, act, id, title, sub, price) {
+        var cant = T && !on && price > left;
+        return '<button class="option' + (on ? " on" : "") + (cant ? " cant" : "") + '" data-act="' + act + '"' + (id ? ' data-id="' + id + '"' : "") + (cant ? " disabled" : "") + '><span class="box">' + (on ? "✓" : "") +
+          "</span><span style=\"flex:1\"><b>" + title + "</b>" + (sub ? '<br><span class="muted">' + sub + "</span>" : "") + "</span>" + (T ? '<span class="cost num">' + price + "</span>" : "") + "</button>";
+      }
+      var n = 0;
+      function step(text) { n++; return '<div class="label" style="margin-top:18px">' + n + " · " + text + "</div>"; }
       html = '<div class="label">' + (sh.offerId ? "Edit the term sheet for" : "Term sheet for") + '</div><div class="bigname">' + esc(b.name) + '</div><div class="muted">' + esc(b.pub.org) + "</div>" +
-        (!sh.offerId && cfg.requireMeetingCode ? '<div class="label" style="margin-top:16px">Their desk number (ask them, face to face)</div>' +
-          '<input class="field deskinput num" id="deskInput" inputmode="numeric" maxlength="2" autocomplete="off" placeholder="--" value="' + esc(sh.desk || "") + '">' : "") +
-        '<div class="label" style="margin-top:16px">Agreed price per year</div>' +
+        step("What does this buyer care about most?") +
+        (known ? '<p class="muted">You know this through your connection. Their boss\'s rule: <b>' + esc(known.constraint.text) + "</b></p>" : '<p class="muted">Ask them. Their boss has a rule too: ask about that as well.</p>') +
+        '<div class="picks">' + Object.keys(S.cards.priorities).map(function (k) {
+          return '<button class="btn small' + (sh.guess === k ? " on" : "") + '" data-act="guess" data-id="' + k + '">' + label("priorities", k) + "</button>";
+        }).join("") + '<button class="btn small' + (sh.guess === "none" ? " on" : "") + '" data-act="guess" data-id="none">I did not ask</button></div>' +
+        step("Agreed price per year") +
         '<div class="stepper"><button class="btn" data-act="price" data-id="-5">−</button><div class="big num" id="priceOut">' + money(sh.price) + '</div><button class="btn" data-act="price" data-id="5">+</button></div>' +
         '<input class="slider" id="priceSlider" type="range" min="' + c.floor + '" max="' + c.list + '" step="1" value="' + sh.price + '">' +
         '<div class="row muted num"><span>Floor ' + money(c.floor) + "</span><span>List " + money(c.list) + "</span></div>" +
-        '<div class="label" style="margin-top:16px">Terms</div><div class="stack">' +
-        '<button class="option' + (sh.pilot ? " on" : "") + '" data-act="pilot"><span class="box">' + (sh.pilot ? "✓" : "") + "</span><span><b>Include a pilot</b><br><span class=\"muted\">" +
-        (ready ? "You are pilot-ready, so this costs you nothing." : "Costs you " + cfg.points.sellerPilotCost + " points if the deal is signed.") + "</span></span></button>" +
-        c.assets.map(function (a) {
-          var on = sh.proof.indexOf(a) >= 0;
-          return '<button class="option' + (on ? " on" : "") + '" data-act="proof" data-id="' + a + '"><span class="box">' + (on ? "✓" : "") + "</span><span><b>Show: " + label("proofs", a) + "</b></span></button>";
-        }).join("") +
-        (c.assets.length ? "" : '<p class="muted">You have no proof to show.</p>') + "</div>" +
+        step("What you add") +
+        (T ? '<div class="row num" style="margin-bottom:8px"><span><b>' + Math.max(0, left) + "</b> of " + T.budget + ' tokens left</span><span class="dots" aria-hidden="true">' + dots(Math.max(0, left), T.budget) + "</span></div>" : "") + '<div class="stack">' +
+        extra(sh.pilot, "pilot", "", "Include a pilot", T ? (ready ? "Cheaper for you: you are pilot-ready." : "A small, safe first step for the buyer.") :
+          (ready ? "You are pilot-ready, so this costs you nothing." : "Costs you " + cfg.points.sellerPilotCost + " points if the deal is signed."), T ? T.pilot : 0) +
+        (T && c.deployWeeks > T.fastWeeks ? extra(sh.fast, "fast", "", "Fast-track deployment", "A dedicated team: live in " + T.fastWeeks + " weeks, not " + c.deployWeeks + ".", T.fast) : "") +
+        E.showable(c).map(function (a) { return extra(sh.proof.indexOf(a) >= 0, "proof", a, "Show: " + label("proofs", a), "", T ? T.proof : 0); }).join("") + "</div>" +
+        (T && c.deployWeeks <= T.fastWeeks ? '<p class="muted" style="margin-top:8px">You already deploy in ' + c.deployWeeks + " weeks, so there is nothing to fast-track.</p>" : "") +
+        (E.showable(c).length ? "" : '<p class="muted" style="margin-top:8px">You have no proof to show.</p>') +
+        (T ? '<p class="muted" style="margin-top:8px">This term sheet ties up <b>' + tok(cost) + "</b>. What the buyer does not need is wasted. Tokens come back if they say no.</p>" : "") +
+        (!sh.offerId && cfg.requireMeetingCode ? step("Their desk number (ask them, face to face)") +
+          '<input class="field deskinput num" id="deskInput" inputmode="numeric" maxlength="2" autocomplete="off" placeholder="--" value="' + esc(sh.desk || "") + '">' : "") +
         '<div class="stack" style="margin-top:18px"><button class="btn primary block" data-act="offer-send"' + (S.busy ? " disabled" : "") + ">" +
         (sh.offerId ? "Update the term sheet" : "Send for signature · uses 1 of your " + me.offers_left) + "</button>" +
         '<button class="btn block" data-act="sheet-close">Cancel</button><p class="muted" style="text-align:center">' +
@@ -334,7 +365,7 @@
       var o = st.offers.filter(function (x) { return x.id === sh.offerId; })[0];
       if (!o) { S.sheet = null; sheetEl.__html = sheetEl.innerHTML = ""; return; }
       if (o.price !== sh.price) { sh.price = o.price; toast("The seller changed the terms. Check them."); }
-      html = '<div class="label">Sign this deal?</div><div class="bigname">' + esc(o.seller.pub.org) + " · " + money(o.price) + (o.pilot ? " + pilot" : "") + "</div>" +
+      html = '<div class="label">Sign this deal?</div><div class="bigname">' + esc(o.seller.pub.org) + " · " + money(o.price) + (o.pilot ? " + pilot" : "") + (o.fast ? " + fast-track" : "") + "</div>" +
         '<div class="card warn" style="margin-top:12px"><p><b>This is your one deal.</b> ' + esc(S.cards.riskRule) + "</p>" +
         (o.pilot ? "<p style=\"margin-top:6px\">This offer includes a pilot: if they fail, you keep " + cfg.points.failedWithPilot + " points.</p>" : "") + "</div>" +
         (E.counters(me.card).length ? '<div class="card rivalnote" style="margin-top:10px"><p>Before you sign: <b>' + esc(me.card.incumbent.name) + "</b> has " + E.stayValue(E.standing(me.card, E.counters(me.card).length), cfg).total + " points on the table, with zero risk.</p></div>" : "") +
@@ -398,24 +429,32 @@
     } else if (a === "sheet-close") {
       closeSheet();
     } else if (a === "offer-open") {
-      openSheet({ type: "offer", buyerId: id, desk: "", price: st.me.card.list, pilot: false, proof: st.me.card.assets.slice() });
+      // Nothing is ticked to start with: the seller adds what this buyer needs.
+      var kn = st.me.card.connections.filter(function (k) { return k.id === id; })[0];
+      openSheet({ type: "offer", buyerId: id, desk: "", price: st.me.card.list, pilot: false, fast: false, proof: [], guess: kn ? kn.priority : null });
     } else if (a === "revise-open") {
       var cur = st.offers.filter(function (x) { return x.id === id; })[0];
-      if (cur) openSheet({ type: "offer", offerId: cur.id, buyerId: cur.buyer_id, price: cur.price, pilot: cur.pilot, proof: (cur.proof || []).slice() });
+      if (cur) openSheet({ type: "offer", offerId: cur.id, buyerId: cur.buyer_id, price: cur.price, pilot: cur.pilot, fast: !!cur.fast, proof: shown(cur), guess: cur.guess || null });
     } else if (a === "price") {
       sh.price = E.clamp(sh.price + Number(id), st.me.card.floor, st.me.card.list); renderSheet();
     } else if (a === "pilot") {
       sh.pilot = !sh.pilot; renderSheet();
+    } else if (a === "fast") {
+      sh.fast = !sh.fast; renderSheet();
+    } else if (a === "guess") {
+      sh.guess = id; renderSheet();
     } else if (a === "proof") {
       var i = sh.proof.indexOf(id);
       if (i >= 0) sh.proof.splice(i, 1); else sh.proof.push(id);
       renderSheet();
     } else if (a === "offer-send") {
+      if (!sh.guess) return toast("Step 1: tap what this buyer cares about, or \"I did not ask\".");
+      var more = { fast: !!sh.fast, guess: sh.guess };
       if (sh.offerId) {
-        act(function () { return api.revise(S.code, S.token, sh.offerId, sh.price, sh.pilot, sh.proof); }, function () { toast("Term sheet updated."); }, true);
+        act(function () { return api.revise(S.code, S.token, sh.offerId, sh.price, sh.pilot, sh.proof, more); }, function () { toast("Term sheet updated."); }, true);
       } else {
         if (cfg.requireMeetingCode && !/^\d{2}$/.test(sh.desk || "")) return toast("Ask the buyer for their 2-digit desk number.");
-        act(function () { return api.offer(S.code, S.token, sh.buyerId, sh.price, sh.pilot, sh.proof, sh.desk); }, function () { toast("Sent. Ask them to sign on their phone."); }, true);
+        act(function () { return api.offer(S.code, S.token, sh.buyerId, sh.price, sh.pilot, sh.proof, sh.desk, more); }, function () { toast("Sent. Ask them to sign on their phone."); }, true);
       }
     } else if (a === "accept-open") {
       var seen = st.offers.filter(function (x) { return x.id === id; })[0];

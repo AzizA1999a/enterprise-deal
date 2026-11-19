@@ -9,6 +9,8 @@
   "conn_type":           { "value": "", "source": "", "url": "" },
   "pilot":               { "value": "", "source": "", "url": "" },
   "proof":               { "value": "", "source": "", "url": "" },
+  "read_buyer":          { "value": "", "source": "", "url": "" },
+  "tokens_load":         { "value": "", "source": "", "url": "" },
 
   "price":               { "value": "", "source": "", "url": "" },
   "offers_per_buyer":    { "value": "", "source": "", "url": "" },
