@@ -159,7 +159,12 @@ html.screen { font-size: clamp(12px, 1.3vw, 30px); }
 .counters { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.1rem; }
 .counter .n { font-family: var(--display); font-size: 3.6rem; font-weight: 800; line-height: 1; }
 .counter .label { font-size: 0.9rem; }
-.ticker { display: flex; flex-direction: column; gap: 0.7rem; overflow: hidden; height: 100%; }
+.tickerbox { display: flex; flex-direction: column; min-height: 0; }
+.ticker { display: flex; flex-direction: column; gap: 0.7rem; flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 0.6rem; }
+.ticker > * { flex: none; }
+.ticker::-webkit-scrollbar { width: 0.55rem; }
+.ticker::-webkit-scrollbar-thumb { background: var(--line); border-radius: 999px; }
+.tick .pn { font-weight: 600; white-space: nowrap; }
 .tick { display: grid; grid-template-columns: 4rem 1fr; gap: 1rem; align-items: baseline; font-size: 1.45rem; padding-bottom: 0.7rem; border-bottom: 1.5px solid var(--line); }
 .tick .t { color: var(--muted); font-size: 1.1rem; }
 .tick b { font-weight: 800; }

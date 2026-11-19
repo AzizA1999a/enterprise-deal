@@ -33,7 +33,7 @@
     bar.innerHTML = '<div class="title">' + esc(cfg.title) + ' <span class="muted" style="font-weight:500">· ' + esc(cfg.subtitle) + "</span></div>" +
       '<div class="right">' + (bots ? '<span class="chip sim">Simulated run · ' + bots + " simulated players</span>" : "") +
       (pub ? '<span class="chip">' + phaseName[pub.game.phase] + "</span>" : "") + "</div>";
-    stage.innerHTML = view();
+    V.redraw(stage, view());
   }
 
   // Arrow keys change the results view, when this browser is also the host's.

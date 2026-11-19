@@ -91,23 +91,32 @@
     pub.players.forEach(function (p) { by[p.id] = p; });
     var buyers = pub.players.filter(function (p) { return p.role === "buyer"; });
     var stayed = buyers.filter(function (p) { return p.decision === "incumbent"; });
-    var events = pub.deals.map(function (d) { return { t: d.decided_t, html: '<b class="who">' + esc(by[d.buyer_id].org) + "</b> signed with <b>" + esc(by[d.seller_id].org) + "</b>", deal: true }; })
-      .concat(stayed.map(function (p) { return { t: p.decided_t, html: "<b>" + esc(p.org) + "</b> stayed with its incumbent" }; }))
+    var who = function (p) { return p && p.name ? ' <span class="pn">(' + esc(p.name) + ")</span>" : ""; };
+    var events = pub.deals.map(function (d) { return { t: d.decided_t, html: '<b class="who">' + esc(by[d.buyer_id].org) + "</b>" + who(by[d.buyer_id]) + " signed with <b>" + esc(by[d.seller_id].org) + "</b>" + who(by[d.seller_id]), deal: true }; })
+      .concat(stayed.map(function (p) { return { t: p.decided_t, html: "<b>" + esc(p.org) + "</b>" + who(p) + " stayed with its incumbent" }; }))
       .concat(buyers.filter(function (p) { return p.defence && !p.decision; }).map(function (p) {
-        return { t: p.defence.t, rival: true, html: "<b>" + esc(p.defence.by) + "</b> " + (p.defence.n > 1 ? "raised its counter-offer to " : "made a counter-offer to ") + esc(p.org) };
+        return { t: p.defence.t, rival: true, html: "<b>" + esc(p.defence.by) + "</b> " + (p.defence.n > 1 ? "raised its counter-offer to " : "made a counter-offer to ") + esc(p.org) + who(p) };
       }))
-      .sort(function (a, b) { return b.t - a.t; }).slice(0, 7);
+      .sort(function (a, b) { return b.t - a.t; });   // newest first; the panel scrolls
     var counterOffers = buyers.reduce(function (n, p) { return n + (p.defence ? p.defence.n : 0); }, 0);
     var rivalsOn = !!(cfg.rivals && cfg.rivals.on);
     var paused = pub.game.phase === "paused";
-    return '<div class="s-cols" style="grid-template-columns:1.25fr 1fr;align-items:stretch"><div style="display:flex;flex-direction:column;justify-content:center;gap:1.8rem">' +
+    return '<div class="s-cols" style="grid-template-columns:1.25fr 1fr;grid-template-rows:minmax(0,1fr);align-items:stretch"><div style="display:flex;flex-direction:column;justify-content:center;gap:1.8rem">' +
       '<div><div class="label" style="font-size:1rem">' + (paused ? "Paused" : "Market open · walk, talk, sign") + '</div><div class="giant num" data-clock></div></div>' +
       '<div class="counters' + (rivalsOn ? " five" : "") + '">' + counter(pub.n_offers, "Term sheets") + (rivalsOn ? counter(counterOffers, "Incumbent counter-offers", "rival") : "") +
       counter(pub.deals.length, "Deals signed") + counter(stayed.length, "Stayed with incumbent") +
       counter(buyers.length - pub.deals.length - stayed.length, "Buyers undecided") + "</div></div>" +
-      '<div class="s-panel" style="min-height:0"><div class="label" style="font-size:1rem;margin-bottom:1rem">Live deal ticker</div><div class="ticker">' +
+      '<div class="s-panel tickerbox"><div class="row" style="margin-bottom:1rem"><span class="label" style="font-size:1rem">Live deal ticker</span>' +
+      (events.length > 5 ? '<span class="muted" style="font-size:0.95rem">' + events.length + " so far · scroll for earlier</span>" : "") + '</div><div class="ticker">' +
       (events.length ? events.map(function (e) { return '<div class="tick' + (e.deal ? " deal" : e.rival ? " rival" : "") + '"><span class="t num">' + ui.tclock(e.t) + "</span><span>" + e.html + "</span></div>"; }).join("")
                      : '<p class="s-sub">No deals yet. Who will sign first?</p>') + "</div></div></div>";
+  };
+  // Redraw a live view without losing the place the presenter scrolled the ticker to.
+  V.redraw = function (el, html) {
+    var old = el.querySelector(".ticker"), top = old ? old.scrollTop : 0;
+    el.innerHTML = html;
+    var now = el.querySelector(".ticker");
+    if (now && top) now.scrollTop = top;
   };
   V.closed = function (pub) {
     var players = pub.players.filter(function (p) { return p.role; });

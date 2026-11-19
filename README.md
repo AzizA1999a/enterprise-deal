@@ -92,7 +92,8 @@ panel's first screen.
 | `deck.html` | The slides themselves. |
 | `art/` | The illustrations (made with Higgsfield in one print style). |
 
-After editing, reload the pages (and redeploy if the site is hosted).
+After editing, reload the pages (and redeploy if the site is hosted). Each page loads its scripts and styles with a version stamp
+(`?v=...`). When a `js/` or `css/` file changes, change that stamp in all five HTML pages, so no browser keeps an old copy.
 
 ## How the rules work
 

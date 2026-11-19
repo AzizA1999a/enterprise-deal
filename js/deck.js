@@ -90,7 +90,7 @@
     }
   });
   deck.addEventListener("click", function (ev) {
-    if (ev.target.closest("button, a, input, .presenter, .d-timer")) return;
+    if (ev.target.closest("button, a, input, .presenter, .d-timer, .ticker")) return;
     next();
   });
   window.addEventListener("hashchange", function () {
@@ -102,7 +102,7 @@
   function setHtml(el, key, html) {
     if (el.__key === key) return;
     el.__key = key;
-    el.innerHTML = html;
+    B2B.views.redraw(el, html);
   }
   function empty(text) { return '<div class="d-empty">' + esc(text) + "</div>"; }
 
