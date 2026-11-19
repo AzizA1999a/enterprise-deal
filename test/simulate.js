@@ -22,7 +22,7 @@ async function playGame(nPlayers, quiet) {
   const pin = "1234";
   const { code } = await api.createGame(pin);
   const ctx = { code, pin, cards, cfg, api };
-  B2B.bots.plans = {};
+  B2B.bots.plans = {}; B2B.rivals.plans = {};
   await B2B.bots.add(ctx, nPlayers - 2, []);
   let hs = await api.hostState(code, pin);
   await B2B.driver.start(ctx, hs);
@@ -33,6 +33,7 @@ async function playGame(nPlayers, quiet) {
     hs = await api.hostState(code, pin);
     await B2B.driver.tick(ctx, hs);
     hs = await api.hostState(code, pin);
+    if (await B2B.rivals.tick(ctx, hs)) hs = await api.hostState(code, pin);
     await B2B.bots.tick(ctx, hs);
     fakeNow += 1000;
     if (hs.game.phase === "locked" && hs.players.every(p => p.exit_answer)) break;
@@ -69,7 +70,22 @@ async function playGame(nPlayers, quiet) {
     if (acc.length) assert.ok(acc[0].price <= b.card.budget, "within budget");
     assert.ok(b.card.connections.length <= cfg.maxConnectionsPerBuyer);
     assert.ok(typeof b.points === "number");
+    // the incumbent's account manager
+    const made = B2B.engine.counters(b.card), R = cfg.rivals;
+    assert.ok(made.length <= R.maxCounters, "counter-offer limit");
+    assert.ok(made.every((c, i) => c.pct <= R.maxDiscount && (i === 0 || c.pct >= made[i - 1].pct)), "discounts only deepen, up to the cap");
+    assert.ok(made.filter(c => c.kind === "final").length <= 1 && made.every((c, i) => c.kind !== "final" || i === made.length - 1), "the final offer is the last one");
+    assert.ok(made.every(c => c.kind !== "early" || !hs.offers.some(o => o.buyer_id === b.id && o.created_at < c.at)), "early renewal only before any pitch");
+    assert.strictEqual((b.pub.defence ? b.pub.defence.n : 0), made.length, "sellers see the right number of counter-offers");
+    if (b.decision === "incumbent") {
+      const taken = B2B.engine.standing(b.card, b.stay_level);
+      assert.strictEqual(b.points, cfg.points.incumbent + (taken ? taken.pct + (taken.addon ? R.addonPoints : 0) : 0), "stay points follow the accepted counter-offer");
+    }
+    if (b.decision === "incumbent_default") assert.strictEqual(b.points, cfg.points.incumbent, "no decision, no discount");
   }
+  const counterEvents = (await api.hostEvents(code, pin)).filter(e => e.type === "counter").length;
+  assert.strictEqual(counterEvents, buyers.reduce((n, b) => n + B2B.engine.counters(b.card).length, 0), "every counter-offer is logged");
+  assert.ok(!JSON.stringify(pub.players).includes("pct"), "the projector never shows a discount during play");
   assert.ok(hs.offers.every(o => o.status !== "pending"), "no pending offers after lock");
   assert.ok(hs.offers.filter(o => o.status === "accepted").every(o => typeof o.delivered === "boolean"));
   assert.ok(pub.full && pub.full.players.every(p => !("token" in p)), "public data has no tokens");
@@ -91,7 +107,8 @@ async function playGame(nPlayers, quiet) {
 (async () => {
   const n = Number(process.argv[2] || 28), games = Number(process.argv[3] || 1);
   if (games === 1) { await playGame(n, false); console.log("OK"); return; }
-  const acc = { withC: [0, 0], without: [0, 0], inc: [0, 0], notCheap: [0, 0], offers: 0, deals: 0, fail: [0, 0] };
+  if (process.argv[4] === "norivals") cfg.rivals.on = false;
+  const acc = { withC: [0, 0], without: [0, 0], inc: [0, 0], notCheap: [0, 0], offers: 0, deals: 0, fail: [0, 0], d: { counters: 0, pitched: 0, signed: 0, wonBack: 0, early: 0, notPitched: 0, disc: [], lev: 0 }, noWin: [0, 0], price: [] };
   for (let i = 0; i < games; i++) {
     const s = await playGame(n, true);
     acc.withC[0] += s.quick.connWith.won; acc.withC[1] += s.quick.connWith.n;
@@ -100,10 +117,21 @@ async function playGame(nPlayers, quiet) {
     acc.notCheap[0] += s.quick.notCheapest.count; acc.notCheap[1] += s.quick.notCheapest.n;
     acc.fail[0] += s.delivery.all.failed; acc.fail[1] += s.delivery.all.n;
     acc.offers += s.counts.offers; acc.deals += s.counts.deals;
+    const d = s.defence;
+    acc.d.counters += d.counters; acc.d.pitched += d.pitched; acc.d.signed += d.signed; acc.d.wonBack += d.wonBack;
+    acc.d.early += d.earlyLocked; acc.d.notPitched += d.notPitched; acc.d.lev += d.leverage;
+    if (d.avgDiscount != null) acc.d.disc.push(d.avgDiscount);
+    acc.noWin[0] += s.firstWin.noWin; acc.noWin[1] += s.firstWin.sellers;
+    if (s.price.win != null) acc.price.push(s.price.win);
   }
   const pct = a => (100 * a[0] / a[1]).toFixed(0) + "% (" + a[0] + "/" + a[1] + ")";
   console.log(`${games} games of ${n} players — all invariants held`);
   console.log("win rate with connection:", pct(acc.withC), "| without:", pct(acc.without));
   console.log("stayed with incumbent:", pct(acc.inc), "| winners not cheapest:", pct(acc.notCheap), "| deliveries failed:", pct(acc.fail));
   console.log("offers per game:", (acc.offers / games).toFixed(1), "| deals per game:", (acc.deals / games).toFixed(1));
+  const mean = a => a.length ? (a.reduce((x, y) => x + y, 0) / a.length).toFixed(1) : "-";
+  console.log("sellers with no deal:", pct(acc.noWin), "| average winning price, % of incumbent:", mean(acc.price));
+  console.log("account managers:", cfg.rivals.on ? "ON" : "off", "| counter-offers per game:", (acc.d.counters / games).toFixed(1),
+    "| pitched buyers won back:", pct([acc.d.wonBack, acc.d.pitched]), "| pitched buyers who signed:", pct([acc.d.signed, acc.d.pitched]),
+    "| never-pitched buyers closed early:", acc.d.notPitched ? pct([acc.d.early, acc.d.notPitched]) : "-", "| average discount accepted:", mean(acc.d.disc) + "%");
 })().catch(e => { console.error(e); process.exit(1); });

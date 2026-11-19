@@ -47,6 +47,15 @@ input { font: inherit; color: inherit; }
 .card.closed { opacity: 0.55; box-shadow: none; }
 .card.warn { background: var(--bad-soft); border-color: var(--bad); box-shadow: 4px 4px 0 var(--bad); }
 .card.note { background: var(--brand-soft); border: 0; box-shadow: none; }
+/* The incumbent's account manager: navy, so it never looks like a start-up's offer. */
+.card.rival { background: var(--brand); color: var(--brand-ink); border-color: var(--ink); }
+.card.rival .label, .card.rival .muted { color: #c9cbe6; }
+.card.rival .check.ok { color: #9be0bd; }
+.card.rival .say { background: var(--surface); color: var(--ink); border-radius: 12px 12px 12px 2px; padding: 10px 12px; font-weight: 600; display: grid; gap: 6px; }
+.card.rival .say.old { opacity: 0.6; font-weight: 500; font-size: 0.92em; }
+.chip.rival { background: var(--accent); color: var(--accent-ink); }
+.card.rival .chip.plain { background: transparent; color: var(--brand-ink); border-color: var(--brand-ink); }
+.card.rivalnote { background: var(--brand); color: var(--brand-ink); border: 0; box-shadow: none; padding: 10px 12px; }
 .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .stack > * + * { margin-top: 10px; }
 .kv { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -155,6 +164,14 @@ html.screen { font-size: clamp(12px, 1.3vw, 30px); }
 .tick .t { color: var(--muted); font-size: 1.1rem; }
 .tick b { font-weight: 800; }
 .tick.deal b.who { color: var(--accent-text); }
+.tick.rival { color: var(--muted); }
+.tick.rival b { color: var(--brand); }
+.counters.five { grid-template-columns: repeat(5, 1fr); gap: 0.8rem; }
+.counters.five .counter .n { font-size: 3.1rem; }
+.counters.five .counter { padding: 1rem 0.75rem; }
+.counters.five .counter .label { font-size: 0.74rem; letter-spacing: 0.03em; }
+.counter.rival { background: var(--brand); color: var(--brand-ink); }
+.counter.rival .label { color: #c9cbe6; }
 .progress { height: 1.1rem; background: var(--chart-track); border-radius: 0.55rem; overflow: hidden; border: 0.12rem solid var(--ink); }
 .progress > i { display: block; height: 100%; background: var(--accent); transition: width 0.4s; }
 
@@ -171,6 +188,7 @@ html.screen { font-size: clamp(12px, 1.3vw, 30px); }
 .dash.c3 { grid-template-columns: repeat(3, 1fr); }
 .dash.c2 { grid-template-columns: repeat(2, 1fr); }
 .dash.c4 { grid-template-columns: 1.5fr 1fr 1fr 1fr; }
+.dash.c4.even { grid-template-columns: 1.3fr 1fr 1fr 1fr; }
 .dash .s-panel { display: flex; flex-direction: column; gap: 0.9rem; min-height: 0; overflow: hidden; }
 .dash h3, .s-panel h3 { font-size: 1.4rem; font-weight: 800; line-height: 1.15; }
 .bars { display: grid; gap: 0.85rem; }

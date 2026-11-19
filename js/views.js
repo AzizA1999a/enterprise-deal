@@ -64,7 +64,7 @@
     return '<div class="s-panel"><h3>' + esc(title) + "</h3>" + (sub ? '<div class="muted">' + esc(sub) + "</div>" : "") + body + '<div class="grow"></div>' + (benchKey ? bench(benchKey) : "") + "</div>";
   }
   function stat(n, d) { return '<div class="stat"><div class="n num">' + esc(n) + '</div><div class="d">' + esc(d) + "</div></div>"; }
-  function counter(n, label) { return '<div class="s-panel counter"><div class="n num">' + esc(n) + '</div><div class="label">' + esc(label) + "</div></div>"; }
+  function counter(n, label, cls) { return '<div class="s-panel counter' + (cls ? " " + cls : "") + '"><div class="n num">' + esc(n) + '</div><div class="label">' + esc(label) + "</div></div>"; }
 
   // ---------- game phases ----------
   V.lobby = function (pub, code) {
@@ -93,14 +93,20 @@
     var stayed = buyers.filter(function (p) { return p.decision === "incumbent"; });
     var events = pub.deals.map(function (d) { return { t: d.decided_t, html: '<b class="who">' + esc(by[d.buyer_id].org) + "</b> signed with <b>" + esc(by[d.seller_id].org) + "</b>", deal: true }; })
       .concat(stayed.map(function (p) { return { t: p.decided_t, html: "<b>" + esc(p.org) + "</b> stayed with its incumbent" }; }))
+      .concat(buyers.filter(function (p) { return p.defence && !p.decision; }).map(function (p) {
+        return { t: p.defence.t, rival: true, html: "<b>" + esc(p.defence.by) + "</b> " + (p.defence.n > 1 ? "raised its counter-offer to " : "made a counter-offer to ") + esc(p.org) };
+      }))
       .sort(function (a, b) { return b.t - a.t; }).slice(0, 7);
+    var counterOffers = buyers.reduce(function (n, p) { return n + (p.defence ? p.defence.n : 0); }, 0);
+    var rivalsOn = !!(cfg.rivals && cfg.rivals.on);
     var paused = pub.game.phase === "paused";
     return '<div class="s-cols" style="grid-template-columns:1.25fr 1fr;align-items:stretch"><div style="display:flex;flex-direction:column;justify-content:center;gap:1.8rem">' +
       '<div><div class="label" style="font-size:1rem">' + (paused ? "Paused" : "Market open · walk, talk, sign") + '</div><div class="giant num" data-clock></div></div>' +
-      '<div class="counters">' + counter(pub.n_offers, "Term sheets") + counter(pub.deals.length, "Deals signed") + counter(stayed.length, "Stayed with incumbent") +
+      '<div class="counters' + (rivalsOn ? " five" : "") + '">' + counter(pub.n_offers, "Term sheets") + (rivalsOn ? counter(counterOffers, "Incumbent counter-offers", "rival") : "") +
+      counter(pub.deals.length, "Deals signed") + counter(stayed.length, "Stayed with incumbent") +
       counter(buyers.length - pub.deals.length - stayed.length, "Buyers undecided") + "</div></div>" +
       '<div class="s-panel" style="min-height:0"><div class="label" style="font-size:1rem;margin-bottom:1rem">Live deal ticker</div><div class="ticker">' +
-      (events.length ? events.map(function (e) { return '<div class="tick' + (e.deal ? " deal" : "") + '"><span class="t num">' + ui.tclock(e.t) + "</span><span>" + e.html + "</span></div>"; }).join("")
+      (events.length ? events.map(function (e) { return '<div class="tick' + (e.deal ? " deal" : e.rival ? " rival" : "") + '"><span class="t num">' + ui.tclock(e.t) + "</span><span>" + e.html + "</span></div>"; }).join("")
                      : '<p class="s-sub">No deals yet. Who will sign first?</p>') + "</div></div></div>";
   };
   V.closed = function (pub) {
@@ -177,6 +183,20 @@
       var q = st.quick.incumbent;
       return panel("Buyers who stayed with the incumbent", stat(pct(q.pct), q.count + " of " + q.n + " buyers" + (q.byDefault ? ", " + q.byDefault + " of them by never deciding" : "") + "."), "incumbent_share");
     },
+    // What the incumbents' account managers achieved, among buyers a start-up actually reached.
+    defence: function (st) {
+      var d = st.defence;
+      if (!d.on) return panel("When the incumbent fought back", '<p class="muted">The incumbents made no counter-offers in this game.</p>', "incumbent_defence");
+      function part(label, n, base) { return { label: label, width: d.pitched ? (n / d.pitched) * 100 : 0, value: d.pitched ? pct((n / d.pitched) * 100) : "none", note: n + " of " + d.pitched, base: base, empty: !d.pitched }; }
+      return panel("When the incumbent fought back", bars([
+        part("Took the incumbent's counter-offer", d.wonBack),
+        part("Signed the start-up anyway", d.signed),
+        part("Stayed without a counter-offer", d.stayedPlain, true)
+      ], null, true) + '<p class="muted" style="margin-top:0.6rem">' + d.counters + " counter-offers, from account managers played by the computer" +
+        (d.avgDiscount == null ? "." : ". Keeping a customer cost them " + Math.round(d.avgDiscount) + "% off, on average.") +
+        (d.earlyLocked ? " " + d.earlyLocked + (d.earlyLocked === 1 ? " buyer was" : " buyers were") + " renewed early, before any start-up reached them." : "") + "</p>",
+        "incumbent_defence", "Buyers who were pitched by at least one start-up");
+    },
     connQuick: function (st) {
       var q = st.quick;
       return panel("Term sheets signed, with and without a connection", bars([
@@ -192,7 +212,11 @@
   var P = V.panels;
   V.full1 = function (st) { return head("What won deals", 1) + '<div class="dash c3">' + P.conn(st) + P.pilot(st) + P.proof(st) + "</div>"; };
   V.full2 = function (st) { return head("Price and effort", 2) + '<div class="dash c4">' + P.price(st) + P.perBuyer(st) + P.firstWin(st) + P.time(st) + "</div>"; };
-  V.full3 = function (st) { return head("What buyers said drove the decision", 3) + '<div class="dash c3">' + P.signed(st) + P.stayed(st) + P.reject(st) + "</div>"; };
+  V.full3 = function (st) {
+    return head("What buyers said drove the decision", 3) + (st.defence.on
+      ? '<div class="dash c4 even">' + P.defence(st) + P.signed(st) + P.stayed(st) + P.reject(st) + "</div>"
+      : '<div class="dash c3">' + P.signed(st) + P.stayed(st) + P.reject(st) + "</div>");
+  };
   V.full4 = function (st) { return head("What sellers believed, and what the risk really was", 4) + '<div class="dash c3">' + P.sellersWon(st) + P.sellersLost(st) + P.delivery(st) + "</div>"; };
 
   B2B.views = V;

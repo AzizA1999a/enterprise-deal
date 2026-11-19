@@ -59,6 +59,7 @@
     var deals = hs.offers.filter(function (o) { return o.status === "accepted"; }).length;
     var stayed = P.filter(function (p) { return p.decision === "incumbent" || p.decision === "incumbent_default"; }).length;
     var answered = P.filter(function (p) { return p.exit_answer; }).length;
+    var counterOffers = P.reduce(function (n, p) { return n + (p.role === "buyer" ? B2B.engine.counters(p.card).length : 0); }, 0);
     var names = { lobby: "Lobby", briefing: "Briefing", open: "Market open", paused: "Paused", locked: "Market closed" };
     function btn(act, label, cls, id, disabled) {
       return '<button class="btn ' + (cls || "") + '" data-act="' + act + '"' + (id ? ' data-id="' + id + '"' : "") + (disabled ? " disabled" : "") + ">" + label + "</button>";
@@ -74,12 +75,13 @@
     }
     var hint = g.phase === "lobby" ? (P.length < 2 ? "Waiting for players. At least 2 are needed." : "Press Start when everyone has joined. Late joiners still get a role.") :
       g.phase === "briefing" ? "Players are reading their cards. The market opens by itself when the clock reaches zero." :
-      g.phase === "open" ? "The market locks by itself at zero." :
+      g.phase === "open" ? "The market locks by itself at zero." + (cfg.rivals && cfg.rivals.on ? " The incumbents' account managers are played by this laptop: keep this page or the slides open." : "") :
       g.phase === "paused" ? "No offers or decisions while paused." :
       "These buttons set the stand-alone projector screen. The slides show results on their own.";
     return '<div class="row"><div><div class="label">Phase</div><div class="phase">' + names[g.phase] + '</div></div><div style="text-align:right"><div class="label">Clock</div><div class="phase num" data-clock></div></div></div>' +
       '<div class="chips"><span class="chip plain num">' + P.length + ' players</span><span class="chip plain num">' + sellers + " sellers · " + buyers + ' buyers</span><span class="chip plain num">' + hs.offers.length +
       ' offers</span><span class="chip plain num">' + deals + ' deals</span><span class="chip plain num">' + stayed + ' stayed with incumbent</span>' +
+      (cfg.rivals && cfg.rivals.on ? '<span class="chip plain num">' + counterOffers + " incumbent counter-offers</span>" : "") +
       (g.phase === "locked" ? '<span class="chip plain num">' + answered + " of " + (sellers + buyers) + " exit answers</span>" : "") + "</div>" +
       '<p class="muted">' + hint + '</p><div class="controls">' + controls + "</div>" +
       (H.msg ? '<div class="card warn">' + esc(H.msg) + "</div>" : "");
@@ -94,7 +96,8 @@
         var got = hs.offers.filter(function (o) { return o.buyer_id === p.id; });
         var wins = sent.filter(function (o) { return o.status === "accepted"; }).length;
         var result = !p.role ? "" : p.role === "seller" ? (wins ? wins + " won" : "") :
-          p.decision === "startup" ? "Signed a start-up" : p.decision === "incumbent" ? "Stayed" : p.decision === "incumbent_default" ? "Stayed (no decision)" : "";
+          p.decision === "startup" ? "Signed a start-up" : p.decision === "incumbent" ? "Stayed" + (function () { var c = B2B.engine.standing(p.card, p.stay_level); return c ? " (took " + c.pct + "% off)" : ""; })() :
+          p.decision === "incumbent_default" ? "Stayed (no decision)" : B2B.engine.counters(p.card).length ? B2B.engine.counters(p.card).length + " counter-offer(s) on the table" : "";
         return "<tr><td>" + esc(p.name) + (p.is_bot ? ' <span class="chip grey">sim</span>' : "") + "</td><td>" + esc(p.role || "waiting") + "</td><td>" + esc(p.card ? p.card.org : "") + "</td><td>" + esc(p.card ? p.card.categoryName : "") +
           "</td><td>" + esc(p.card ? p.card.connections.map(function (c) { return c.name; }).join(", ") : "") + '</td><td class="num">' + (p.role === "seller" ? sent.length + " sent" : p.role === "buyer" ? got.length + " received" : "") +
           "</td><td>" + result + (p.points != null ? ' · <span class="num">' + p.points + " pts</span>" : "") + "</td><td>" + esc(p.exit_answer || "") + "</td></tr>";
@@ -155,7 +158,7 @@
       run(api.host(H.sess.code, H.sess.pin, "view", { view: id }));
     } else if (a === "reset") {
       if (window.confirm("Reset the game? All players, offers and results are deleted. Export first if you need the data.")) {
-        B2B.bots.plans = {};
+        B2B.bots.plans = {}; B2B.rivals.plans = {};
         run(api.host(H.sess.code, H.sess.pin, "reset"));
       }
     } else if (a === "addbots") {

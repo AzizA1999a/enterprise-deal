@@ -26,6 +26,22 @@ window.B2B_CONFIG = {
   connectionMix: [0.4, 0.4, 0.2],
   maxConnectionsPerBuyer: 2,
 
+  // The big vendors fight back. Every buyer's incumbent has an account manager played by the computer.
+  // These are game settings, not measured facts. Set on: false to switch the account managers off.
+  rivals: {
+    on: true,
+    reactSeconds: [12, 30],      // how long an account manager takes to answer a start-up's term sheet
+    earlyRenewalAt: [0.3, 0.55], // share of the market time after which a buyer nobody has pitched gets an early-renewal offer
+    earlyDiscount: 5,            // % off the renewal for closing early
+    firstDiscount: 8,            // the smallest first counter-offer, in % off the incumbent's price
+    matchShare: 0.35,            // first counter: this share of the start-up's saving is matched
+    finalMatchShare: 0.6,        // final counter: this share is matched
+    finalStep: 3,                // the final counter is at least this many points deeper than the one before
+    maxDiscount: 20,             // an account manager never discounts more than this
+    addonPoints: 15,             // the final counter adds an extra aimed at the buyer's hidden priority
+    maxCounters: 3               // counter-offers per buyer, at most
+  },
+
   // Points. A connection never changes any of these.
   points: {
     incumbent: 50,           // buyer stays with the incumbent

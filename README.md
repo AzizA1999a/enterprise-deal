@@ -47,6 +47,27 @@ in APA format on the last slides. The wording is a draft for the team to rewrite
 - The buyer signs it or rejects it. A buyer signs one deal, or stays with the incumbent.
 - The Badge tab turns the phone into a name tag.
 
+### The big vendors fight back
+
+Every buyer's incumbent has an account manager played by the computer, in a real class as well as in demo mode.
+It makes the start-ups work for every deal:
+
+- **Early renewal.** A buyer nobody has pitched gets "renew today for 5% off" part-way through the market.
+  If they take it, they leave the market before a start-up reaches them.
+- **Counter-offer.** 12 to 30 seconds after a start-up's term sheet arrives, the incumbent answers with a
+  discount that matches part of the start-up's saving, and one line of doubt about the start-up's weakest
+  point (no reference customer, no security certification, no pilot).
+- **Final offer.** When the start-up improves its terms, or a second start-up arrives, the incumbent makes
+  one last, deeper offer (20% off at most) with an extra aimed at the buyer's hidden priority.
+- The buyer sees all of this on the Inbox tab and scores it only by tapping **Stay** before the close:
+  50 points, plus 1 per 1% off, plus 15 for the extra. A buyer who never decides renews at the full price.
+- A seller sees only that the incumbent has countered, not by how much. They have to ask.
+- The projector shows each counter-offer in the ticker, never the amount.
+
+The account managers run on the host laptop, so the slides or the host panel must stay open during the market.
+All of their settings are in `rivals` in `js/config.js` (`on: false` switches them off); their lines are drafts
+in `rivals` in `data/cards.json`. These are game settings, not measured facts about real vendors.
+
 ## Rehearsing alone (demo mode)
 
 In the host panel, **Add simulated players** fills the game with bots that join, send offers, decide and
@@ -66,7 +87,7 @@ panel's first screen.
 | `data/cards.json` | Role card templates, categories, wording of rules, exit options. Drafts: rewrite freely. |
 | `data/benchmarks.json` | The "Real world" line under each dashboard metric. Empty until you fill it in. |
 | `css/theme.css` | The colour palette and font. |
-| `js/config.js` | Team names, timings, seller/buyer split, term sheets per seller, points, Supabase connection. |
+| `js/config.js` | Team names, timings, seller/buyer split, term sheets per seller, points, how hard the incumbents fight (`rivals`), Supabase connection. |
 | `js/facts.js` | The research figures, cases, playbook and APA reference list shown on the slides. Never add a number without its source. |
 | `deck.html` | The slides themselves. |
 | `art/` | The illustrations (made with Higgsfield in one print style). |
@@ -96,5 +117,5 @@ plays one real-time game against the live database (about a minute).
 
 ## Database
 
-`supabase/schema.sql` followed by `supabase/002_face_to_face.sql` is the full database: private tables plus the `sim_*` functions that phones call.
+`supabase/schema.sql`, then `supabase/002_face_to_face.sql`, then `supabase/003_rivals.sql` is the full database: private tables plus the `sim_*` functions that phones call.
 Phones can never read a table directly, so hidden card information stays hidden.

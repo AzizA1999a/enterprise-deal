@@ -10,6 +10,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 (async () => {
   const n = Number(process.argv[2] || 28);
   cfg.briefingSeconds = 2; cfg.marketSeconds = Number(process.argv[3] || 40);
+  cfg.rivals.reactSeconds = [2, 5];                                            // a short game needs quick account managers
   const pin = String(Math.floor(100000 + Math.random() * 900000));
   const { code } = await api.createGame(pin);
   const ctx = { code, pin, cards, cfg, api };
@@ -39,13 +40,31 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   assert.strictEqual(pubDuring.full, null, "no full data before the lock");
   assert.ok(!JSON.stringify(pubDuring).includes("reliability"), "projector data hides reliability during play");
 
-  let polls = 0, pollMs = 0, paused = false, faceTested = false;
+  let polls = 0, pollMs = 0, paused = false, faceTested = false, stayTested = false;
   for (let i = 0; i < 600; i++) {
     const a = Date.now();
     hs = await api.hostState(code, pin);
     pollMs += Date.now() - a; polls++;
     await B2B.driver.tick(ctx, hs);
+    if (await B2B.rivals.tick(ctx, hs)) hs = await api.hostState(code, pin);
     await B2B.bots.tick(ctx, hs);
+    if (!stayTested && hs.game.phase === "open") {                             // a buyer cannot claim a counter-offer that was never made
+      const b = hs.players.find(p => p.role === "buyer" && !p.decision && B2B.engine.counters(p.card).length);
+      if (b) {
+        stayTested = true;
+        const during = await api.public(code);
+        assert.ok(during.players.some(p => p.defence && p.defence.n >= 1), "the projector knows an incumbent has countered");
+        assert.ok(!JSON.stringify(during.players).includes("pct"), "the projector never shows the discount during play");
+        const sellerTok = hs.players.find(p => p.role === "seller" && p.category === b.category).token;
+        const sv = await api.state(code, sellerTok);
+        assert.ok(sv.buyers.some(x => x.id === b.id && x.pub.defence && x.pub.defence.n >= 1) && !JSON.stringify(sv.buyers).includes("counters"), "sellers see that a counter-offer exists, not what it is");
+        await api.incumbent(code, b.token, 99);
+        const after = (await api.hostState(code, pin)).players.find(p => p.id === b.id);
+        assert.strictEqual(after.stay_level, B2B.engine.counters(after.card).length, "stay level is capped at the counter-offers really made");
+        console.log("incumbent counter-offer rules OK");
+        continue;
+      }
+    }
     if (!faceTested && hs.game.phase === "open") {                            // desk number, edit, sign-what-you-saw
       faceTested = true;
       const seller = hs.players.find(p => p.role === "seller" && p.offers_left > 0);
@@ -89,7 +108,11 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   for (const b of buyers) {
     assert.ok(hs.offers.filter(o => o.buyer_id === b.id && o.status === "accepted").length <= 1);
     assert.ok(b.decision && typeof b.points === "number");
+    const made = B2B.engine.counters(b.card), took = b.decision === "incumbent" ? B2B.engine.standing(b.card, b.stay_level) : null;
+    assert.ok(made.length <= cfg.rivals.maxCounters);
+    if (b.decision !== "startup") assert.strictEqual(b.points, cfg.points.incumbent + (took ? took.pct + (took.addon ? cfg.rivals.addonPoints : 0) : 0), "stay points follow the accepted counter-offer");
   }
+  assert.ok(stayTested, "at least one counter-offer was made and tested");
   assert.ok(hs.offers.every(o => o.status !== "pending"));
   assert.ok(hs.offers.filter(o => o.status === "accepted").every(o => typeof o.delivered === "boolean"));
   await api.exit(code, "human-token-aaaaaaaa", "price");
@@ -99,6 +122,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   const stats = B2B.stats.compute(pub.full, cards);
   const csv = B2B.exporter.offersCsv(pub.full, cards, cfg);
   const events = await api.hostEvents(code, pin);
+  assert.strictEqual(events.filter(e => e.type === "counter").length, buyers.reduce((n, b) => n + B2B.engine.counters(b.card).length, 0), "every counter-offer is in the event log");
+  console.log("incumbent defence:", JSON.stringify(stats.defence));
   console.log(`players ${hs.players.length} (${sellers.length} sellers / ${buyers.length} buyers), offers ${hs.offers.length}, deals ${stats.counts.deals}, events ${events.length}, csv rows ${csv.trim().split("\r\n").length - 1}`);
   console.log(`host poll average ${(pollMs / polls).toFixed(0)} ms over ${polls} polls`);
   console.log("quick:", JSON.stringify(stats.quick));

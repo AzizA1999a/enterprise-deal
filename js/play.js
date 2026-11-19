@@ -40,6 +40,39 @@
     if (s === "lost_incumbent") return '<span class="chip grey">Lost: buyer stayed with the incumbent</span>';
     return '<span class="chip grey">No answer before the close</span>';
   }
+  // ---------- the incumbent's account manager ----------
+  function fill(text, c, card) {
+    return String(text || "").replace(/\{pct\}/g, c.pct).replace(/\{startup\}/g, c.vs || "that start-up")
+      .replace(/\{incumbent\}/g, card.incumbent.name).replace(/\{addon\}/g, ((S.cards.rivals || {}).addons || {})[card.priority] || "an extra");
+  }
+  function counterLines(c, card) {
+    var R = S.cards.rivals || {};
+    var out = [fill(R[c.kind] || R.counter, c, card)];
+    if (c.attack && c.kind !== "early" && (R.attack || {})[c.attack]) out.push(fill(R.attack[c.attack], c, card));
+    return out;
+  }
+  // The incumbent's side of the buyer's inbox: the renewal, and every counter-offer made so far.
+  function incumbentCard(st) {
+    var me = st.me, c = me.card, list = E.counters(c), last = list[list.length - 1];
+    var taken = me.decision === "incumbent" ? E.standing(c, me.stay_level) : me.decision ? null : last;
+    var val = E.stayValue(taken, cfg);
+    var price = taken ? Math.round(c.incumbent.price * (1 - taken.pct / 100)) : c.incumbent.price;
+    var html = '<div class="card rival stack"><div class="row"><div><div class="label">Your incumbent</div><div class="bigname">' + esc(c.incumbent.name) + "</div></div>" +
+      '<div style="text-align:right"><div class="price num">' + money(price) + '</div><div class="muted num">' + (taken ? taken.pct + "% off " + money(c.incumbent.price) : "renewal price") + "</div></div></div>";
+    if (list.length) {
+      html += '<div class="chips"><span class="chip rival">' + (last.kind === "final" ? "Final offer" : last.kind === "early" ? "Early renewal offer" : "Counter-offer " + list.length) + "</span>" +
+        (last.addon ? '<span class="chip plain">+ ' + esc(((S.cards.rivals || {}).addons || {})[c.priority] || "an extra") + "</span>" : "") + "</div>" +
+        list.slice().reverse().map(function (x, i) {
+          var lines = counterLines(x, c);
+          return '<div class="say' + (i ? " old" : "") + '">' + (i ? lines.slice(0, 1) : lines).map(function (l) { return "<p>" + esc(l) + "</p>"; }).join("") + "</div>";
+        }).join("");
+    } else {
+      html += '<p class="muted">Staying carries zero risk. If a start-up pitches you, expect ' + esc(c.incumbent.name) + " to fight for you.</p>";
+    }
+    if (!me.decision) html += '<div class="check ok">Staying now scores ' + val.total + " points, with zero risk" + (list.length ? ". Use it to negotiate." : ".") + "</div>";
+    return html + "</div>";
+  }
+
   function offerTerms(o) {
     return '<div class="chips">' + (o.pilot ? '<span class="chip good">Pilot included</span>' : "") + proofChips(o.proof) +
       (!o.pilot && !(o.proof || []).length ? '<span class="chip grey">No proof shown</span>' : "") + "</div>";
@@ -61,6 +94,7 @@
       '<div class="card stack"><div class="label">People you know</div>' +
       (conns || "<p><b>Nobody.</b> You are selling cold: you cannot see any buyer's priority.</p>") + "</div>" +
       '<div class="card note stack"><div class="label">Rules</div><p><b>Walk over and talk.</b> When a buyer is interested, ask for their desk number and write the term sheet together. You can open <b>' + cfg.offersPerSeller + " term sheets</b> in the whole game, and edit one until it is signed or rejected.</p>" +
+      (cfg.rivals && cfg.rivals.on ? '<p><b>You are not alone at the table.</b> Every buyer has an incumbent, and its account manager will answer your term sheet with a counter-offer. Ask the buyer what they were offered, then improve your terms.</p>' : "") +
       '<p class="muted">Each delivered deal scores ' + P.sellerDeal + " points, plus up to " + P.sellerPriceHeld + " for keeping your price near list. A pilot costs you " + P.sellerPilotCost + ' points unless you are pilot-ready.</p></div>';
   }
   function buyerCard(c) {
@@ -71,13 +105,14 @@
     }).join("");
     return '<div class="card stack"><div class="rolebanner"><img src="art/buyer-s.jpg" alt=""></div><div class="label">You are the ' + esc(c.title) + ' at</div><div class="bigname">' + esc(c.org) + "</div><p>You need: " + esc(c.need) + "</p>" +
       '<div class="kv"><div><div class="label">Budget</div><div class="v num">' + money(c.budget) + '</div></div><div><div class="label">Incumbent price</div><div class="v num">' + money(c.incumbent.price) + "</div></div></div>" +
-      "<p>Your incumbent is <b>" + esc(c.incumbent.name) + "</b>. Staying is always possible and carries zero risk.</p></div>" +
+      "<p>Your incumbent is <b>" + esc(c.incumbent.name) + "</b>. Staying is always possible and carries zero risk." +
+      (cfg.rivals && cfg.rivals.on ? " Their account manager will fight to keep you: any counter-offer is real, and you can use it to negotiate." : "") + "</p></div>" +
       '<div class="card stack"><div class="label">Hidden priority (keep it to yourself)</div><div class="bigname">' + label("priorities", c.priority) + '</div><p class="muted">' + esc(E.priorityRule(c.priority, cfg)) + "</p>" +
       '<div class="label" style="margin-top:14px">Your boss\'s rule</div><p><b>' + esc(c.constraint.text) + "</b></p></div>" +
       '<div class="card warn stack"><div class="label" style="color:var(--bad)">Career risk</div><p><b>' + esc(S.cards.riskRule) + "</b></p></div>" +
       '<div class="card stack"><div class="label">People you know</div>' + (conns || "<p><b>Nobody.</b> You cannot check any start-up's real reliability.</p>") + "</div>" +
       '<div class="card note stack"><div class="label">Rules</div><p><b>Sellers will come to you.</b> Listen, push back, negotiate out loud.' + (c.desk ? " Give a seller your desk number <b>" + esc(c.desk) + "</b> only when you want their term sheet on your phone." : "") + " You can sign <b>1 deal</b>, or stay with your incumbent.</p>" +
-      '<p class="muted">Staying scores ' + P.incumbent + " points. A start-up that delivers scores " + P.startupBase + ", plus 1 per 1% saved (up to " + P.savingsCap + "), plus " + P.priorityBonus + " if it fits your priority, minus " + P.constraintPenalty + " if it breaks your boss's rule.</p></div>";
+      '<p class="muted">Staying scores ' + P.incumbent + " points" + (cfg.rivals && cfg.rivals.on ? ", plus 1 per 1% your incumbent takes off if you accept its counter-offer before the close" : "") + ". A start-up that delivers scores " + P.startupBase + ", plus 1 per 1% saved (up to " + P.savingsCap + "), plus " + P.priorityBonus + " if it fits your priority, minus " + P.constraintPenalty + " if it breaks your boss's rule.</p></div>";
   }
   function roleCard(me) { return me.role === "seller" ? sellerCard(me.card) : buyerCard(me.card); }
   // A name tag to hold up while walking around the room.
@@ -108,6 +143,7 @@
         (k ? '<span class="chip conn">You know them · ' + label("relationships", k.type) + "</span>" : "") +
         '<div><div class="bigname">' + esc(b.name) + '</div><div class="muted">' + esc(b.pub.title) + ", " + esc(b.pub.org) + "</div></div>" +
         "<p>Needs: " + esc(b.pub.need) + "</p>" +
+        (b.pub.defence && !b.decided ? '<div class="card rivalnote"><p><b>' + esc(b.pub.defence.by) + "</b> has made " + (b.pub.defence.n === 1 ? "a counter-offer" : b.pub.defence.n + " counter-offers") + ". Ask what they were offered, then beat it.</p></div>" : "") +
         (k ? '<div class="card note"><p>Hidden priority: <b>' + label("priorities", k.priority) + "</b></p><p>Boss's rule: <b>" + esc(k.constraint.text) + "</b></p></div>" : "") +
         mine.map(function (o) { return '<div class="row"><span class="num"><b>' + money(o.price) + "</b>" + (o.pilot ? " + pilot" : "") + "</span>" + statusChip(o) + "</div>"; }).join("") +
         (function () {
@@ -160,7 +196,8 @@
     c.connections.forEach(function (x) { known[x.id] = true; });
     if (me.decision === "startup") html += '<div class="banner done">Deal signed. Wait for the market to close.</div>';
     if (me.decision === "incumbent") html += '<div class="banner done">You stayed with ' + esc(c.incumbent.name) + ".</div>";
-    html += '<div class="card kv"><div><div class="label">Incumbent · ' + esc(c.incumbent.name) + '</div><div class="v num">' + money(c.incumbent.price) + '</div></div><div><div class="label">Your budget</div><div class="v num">' + money(c.budget) + "</div></div></div>";
+    html += incumbentCard(st);
+    html += '<div class="card row"><span class="label">Your budget</span><span class="bigname num">' + money(c.budget) + "</span></div>";
     if (c.desk && !me.decision) html += '<div class="card note row"><span>Your desk number, for sellers you want to hear from</span><span class="deskpill num" style="font-size:1.5em">' + esc(c.desk) + "</span></div>";
     var pending = st.offers.filter(function (o) { return o.status === "pending"; }).sort(function (a, b) {
       return (known[b.seller_id] ? 1 : 0) - (known[a.seller_id] ? 1 : 0) || b.created_at - a.created_at;
@@ -170,7 +207,7 @@
     html += pending.map(function (o) { return offerCard(st, o, false); }).join("");
     if (closed.length) html += '<div class="label" style="margin:18px 0 8px">Closed offers</div>' + closed.map(function (o) { return offerCard(st, o, true); }).join("");
     if (!me.decision && st.game.phase === "open") {
-      html += '<div class="sticky-bottom"><button class="btn block" data-act="incumbent-open">Stay with ' + esc(c.incumbent.name) + " · zero risk</button></div>";
+      html += '<div class="sticky-bottom"><button class="btn block" data-act="incumbent-open">Stay with ' + esc(c.incumbent.name) + " · " + E.stayValue(E.standing(c, E.counters(c).length), cfg).total + " points, zero risk</button></div>";
     }
     return html;
   }
@@ -181,7 +218,7 @@
     if (me.points == null) return '<div class="hero"><h1>Market closed</h1><p class="muted">Checking which start-ups delivered…</p></div>';
     if (me.role === "buyer") {
       var deal = st.offers.filter(function (o) { return o.status === "accepted"; })[0];
-      var res = E.buyerPoints(me.card, deal || null, deal ? deal.seller.pub : null, cfg);
+      var res = E.buyerPoints(me.card, deal || null, deal ? deal.seller.pub : null, cfg, { decision: me.decision, level: me.stay_level });
       var head = !deal ? "You stayed with " + esc(me.card.incumbent.name) + "." :
         deal.delivered ? esc(deal.seller.pub.org) + " delivered." : esc(deal.seller.pub.org) + " failed to deliver.";
       html += '<div class="card stack" style="text-align:center"><div class="label">Your result</div><div class="bigname"' + (deal && !deal.delivered ? ' style="color:var(--bad)"' : "") + ">" + head + "</div>" +
@@ -268,12 +305,12 @@
   // ---------- sheets ----------
   function renderSheet() {
     var sh = S.sheet, st = S.st;
-    if (!sh || !st || !st.me) { sheetEl.innerHTML = ""; return; }
+    if (!sh || !st || !st.me) { sheetEl.__html = sheetEl.innerHTML = ""; return; }
     var me = st.me, html = "";
     if (sh.type === "offer") {
       var b = st.buyers.filter(function (x) { return x.id === sh.buyerId; })[0];
       var c = me.card, ready = c.assets.indexOf("pilot_ready") >= 0;
-      if (!b) { S.sheet = null; sheetEl.innerHTML = ""; return; }
+      if (!b) { S.sheet = null; sheetEl.__html = sheetEl.innerHTML = ""; return; }
       html = '<div class="label">' + (sh.offerId ? "Edit the term sheet for" : "Term sheet for") + '</div><div class="bigname">' + esc(b.name) + '</div><div class="muted">' + esc(b.pub.org) + "</div>" +
         (!sh.offerId && cfg.requireMeetingCode ? '<div class="label" style="margin-top:16px">Their desk number (ask them, face to face)</div>' +
           '<input class="field deskinput num" id="deskInput" inputmode="numeric" maxlength="2" autocomplete="off" placeholder="--" value="' + esc(sh.desk || "") + '">' : "") +
@@ -295,11 +332,12 @@
         (sh.offerId ? "The buyer sees the new terms at once." : "You can still edit the terms until the buyer signs or rejects.") + "</p></div>";
     } else if (sh.type === "accept") {
       var o = st.offers.filter(function (x) { return x.id === sh.offerId; })[0];
-      if (!o) { S.sheet = null; sheetEl.innerHTML = ""; return; }
+      if (!o) { S.sheet = null; sheetEl.__html = sheetEl.innerHTML = ""; return; }
       if (o.price !== sh.price) { sh.price = o.price; toast("The seller changed the terms. Check them."); }
       html = '<div class="label">Sign this deal?</div><div class="bigname">' + esc(o.seller.pub.org) + " · " + money(o.price) + (o.pilot ? " + pilot" : "") + "</div>" +
         '<div class="card warn" style="margin-top:12px"><p><b>This is your one deal.</b> ' + esc(S.cards.riskRule) + "</p>" +
         (o.pilot ? "<p style=\"margin-top:6px\">This offer includes a pilot: if they fail, you keep " + cfg.points.failedWithPilot + " points.</p>" : "") + "</div>" +
+        (E.counters(me.card).length ? '<div class="card rivalnote" style="margin-top:10px"><p>Before you sign: <b>' + esc(me.card.incumbent.name) + "</b> has " + E.stayValue(E.standing(me.card, E.counters(me.card).length), cfg).total + " points on the table, with zero risk.</p></div>" : "") +
         '<div class="stack" style="margin-top:16px"><button class="btn good block" data-act="accept"' + (S.busy ? " disabled" : "") + ">Sign the deal</button>" +
         '<button class="btn block" data-act="sheet-close">Go back</button></div>';
     } else if (sh.type === "reject") {
@@ -307,15 +345,20 @@
         S.cards.rejectReasons.map(function (r) { return '<button class="btn block" data-act="reject" data-id="' + esc(r.key) + '">' + esc(r.label) + "</button>"; }).join("") +
         '<button class="btn block danger" data-act="reject" data-id="">Reject without a reason</button><button class="btn block" data-act="sheet-close">Go back</button></div>';
     } else if (sh.type === "incumbent") {
+      var lvl = E.counters(me.card).length, stand = E.standing(me.card, lvl), sv = E.stayValue(stand, cfg);
+      sh.level = lvl;
       html = '<div class="label">Final decision</div><div class="bigname">Stay with ' + esc(me.card.incumbent.name) + "?</div>" +
-        '<p style="margin-top:8px">You keep a safe ' + cfg.points.incumbent + " points. Every open offer in your inbox is declined.</p>" +
+        '<p style="margin-top:8px">You keep a safe ' + sv.total + " points" + (stand ? ": " + cfg.points.incumbent + " for staying, plus their counter-offer" : "") + ". Every open offer in your inbox is declined.</p>" +
+        (stand ? '<table class="breakdown">' + sv.parts.map(function (p) { return "<tr><td>" + esc(p.label) + '</td><td class="num">+' + p.value + "</td></tr>"; }).join("") + "</table>" : "") +
         '<div class="stack" style="margin-top:16px"><button class="btn primary block" data-act="incumbent"' + (S.busy ? " disabled" : "") + ">Yes, stay with the incumbent</button>" +
         '<button class="btn block" data-act="sheet-close">Go back</button></div>';
     }
-    sheetEl.innerHTML = '<div class="panel">' + html + "</div>";
+    // Only touch the page when something changed, so a tap is never lost to a redraw.
+    var out = '<div class="panel">' + html + "</div>";
+    if (sheetEl.__html !== out) { sheetEl.__html = out; sheetEl.innerHTML = out; }
   }
   function openSheet(sh) { S.sheet = sh; renderSheet(); }
-  function closeSheet() { S.sheet = null; sheetEl.innerHTML = ""; }
+  function closeSheet() { S.sheet = null; sheetEl.__html = sheetEl.innerHTML = ""; }
 
   var toastTimer = null;
   function toast(msg) {
@@ -386,7 +429,7 @@
     } else if (a === "incumbent-open") {
       openSheet({ type: "incumbent" });
     } else if (a === "incumbent") {
-      act(function () { return api.incumbent(S.code, S.token); });
+      act(function () { return api.incumbent(S.code, S.token, sh.level || 0); });
     } else if (a === "exit") {
       act(function () { return api.exit(S.code, S.token, id); });
     }
@@ -418,7 +461,15 @@
         S.st = st;
         // A sheet is only valid while the market is open.
         if (S.sheet && (!st || !st.me || st.game.phase !== "open")) closeSheet();
-        if (S.sheet && S.sheet.type === "accept") renderSheet();
+        if (S.sheet && (S.sheet.type === "accept" || S.sheet.type === "incumbent") && !S.busy) renderSheet();
+        if (st && st.me && st.me.role === "buyer" && st.me.card) {
+          var nc = E.counters(st.me.card).length;
+          if (S.counters != null && nc > S.counters && !st.me.decision) {
+            toast(st.me.card.incumbent.name + " just made you a counter-offer.");
+            if (navigator.vibrate) navigator.vibrate(120);
+          }
+          S.counters = nc;
+        }
         render();
       });
     }, function () {

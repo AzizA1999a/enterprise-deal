@@ -3,6 +3,7 @@
 
   "conn_win_rate":       { "value": "", "source": "", "url": "" },
   "incumbent_share":     { "value": "", "source": "", "url": "" },
+  "incumbent_defence":   { "value": "", "source": "", "url": "" },
   "not_cheapest":        { "value": "", "source": "", "url": "" },
 
   "conn_type":           { "value": "", "source": "", "url": "" },

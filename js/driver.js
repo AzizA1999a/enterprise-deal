@@ -1,6 +1,8 @@
 /* Runs on the host laptop only.
    driver: the automatic steps (assign late joiners, open the market after the
            briefing, lock at zero, resolve deliveries).
+   rivals: the incumbents' account managers. Always computer-played, in a real
+           class as well as in demo mode: they counter every start-up term sheet.
    bots:   simulated players for demo mode. They use the same calls as phones. */
 (function (root) {
   "use strict";
@@ -32,8 +34,11 @@
     return ctx.api.hostState(ctx.code, ctx.pin).then(function (hs) {
       if (!leader.has(ctx.code)) return hs;
       return driver.tick(ctx, hs).then(function (changed) {
-        if (changed || !botsOn) return hs;
-        return bots.tick(ctx, hs).then(function () { return hs; });
+        if (changed) return hs;
+        return rivals.tick(ctx, hs).then(function (moved) {
+          if (moved || !botsOn) return hs;
+          return bots.tick(ctx, hs).then(function () { return hs; });
+        });
       });
     });
   }
@@ -71,6 +76,45 @@
   };
 
   // ===================================================================
+  // The incumbents' account managers. One per buyer, played by this laptop.
+  var rivals = {
+    plans: {},
+    rnd: Math.random,
+    busy: false,
+
+    tick: function (ctx, hs) {
+      var R = ctx.cfg.rivals, g = hs.game;
+      if (g.phase === "lobby") rivals.plans = {};
+      if (!R || !R.on || rivals.busy || g.phase !== "open" || !g.total_ms) return Promise.resolve(false);
+      var elapsed = g.total_ms - Math.max(0, g.ends_at - hs.now);
+      var frac = elapsed / g.total_ms, t = Math.round(elapsed / 1000);
+      var pubs = {}, patch = [], events = [], r = rivals.rnd;
+      hs.players.forEach(function (p) { pubs[p.id] = p.pub; });
+      hs.players.forEach(function (b) {
+        if (b.role !== "buyer" || b.decision) return;
+        var pl = rivals.plans[b.id] || (rivals.plans[b.id] = { early: R.earlyRenewalAt[0] + r() * (R.earlyRenewalAt[1] - R.earlyRenewalAt[0]), due: null });
+        var mine = hs.offers.filter(function (o) { return o.buyer_id === b.id; });
+        var c = E.rivalCounter(b, mine, pubs, ctx.cfg, { early: frac >= pl.early });
+        if (!c) { pl.due = null; return; }
+        // An account manager needs a moment to hear about the start-up and get a discount approved.
+        if (pl.due == null) pl.due = hs.now + (c.kind === "early" ? 0 : (R.reactSeconds[0] + r() * (R.reactSeconds[1] - R.reactSeconds[0])) * 1000);
+        if (hs.now < pl.due) return;
+        pl.due = null;
+        c.at = hs.now; c.t = t;
+        var card = E.clone(b.card), pub = E.clone(b.pub);
+        card.incumbent.counters = E.counters(card).concat([c]);
+        pub.defence = { n: card.incumbent.counters.length, t: t, by: card.incumbent.name };
+        patch.push({ id: b.id, card: card, pub: pub });
+        events.push({ type: "counter", actor: b.id, data: { incumbent: card.incumbent.name, number: pub.defence.n, kind: c.kind, discount_pct: c.pct, extra: c.addon, against: c.vs, argument: c.attack } });
+      });
+      if (!patch.length) return Promise.resolve(false);
+      rivals.busy = true;
+      return ctx.api.hostApply(ctx.code, ctx.pin, { players: patch, events: events })
+        .then(function () { rivals.busy = false; return true; }, function (e) { rivals.busy = false; throw e; });
+    }
+  };
+
+  // ===================================================================
   var NAMES = ["Ava", "Liam", "Noor", "Mateo", "Zoe", "Omar", "Maya", "Lucas", "Sara", "Ethan", "Lina", "Diego",
     "Chloe", "Yusuf", "Emma", "Kai", "Layla", "Noah", "Priya", "Leo", "Hana", "Marco", "Ines", "Tariq", "Grace",
     "Jonas", "Amira", "Felix", "Nadia", "Hugo", "Mei", "Sami", "Elena", "Ravi", "Clara", "Idris", "Julia", "Andre",
@@ -96,7 +140,7 @@
       var r = bots.rnd, pl = bots.plans[p.id];
       if (pl) return pl;
       if (p.role === "seller") {
-        pl = { sendAt: [0.04 + r() * 0.3, 0.2 + r() * 0.4, 0.4 + r() * 0.42].sort(), sent: 0 };
+        pl = { sendAt: [0.04 + r() * 0.3, 0.2 + r() * 0.4, 0.4 + r() * 0.42].sort(), sent: 0, seen: {}, nextAnswer: 0 };
       } else {
         pl = { wake: 0.18 + r() * 0.35, giveUp: 0.74 + r() * 0.22, nextLook: 0, scores: {}, reason: null, abstain: r() < 0.12 };
       }
@@ -148,6 +192,24 @@
       return ctx.api.offer(ctx.code, s.token, target.id, price, pilot, proof, target.card.desk);
     },
 
+    // A seller hears that the incumbent has countered, and improves the open term sheet.
+    sellerAnswer: function (ctx, hs, s, pl) {
+      var r = bots.rnd, job = null;
+      hs.offers.forEach(function (o) {
+        if (job || o.seller_id !== s.id || o.status !== "pending") return;
+        var b = hs.players.filter(function (x) { return x.id === o.buyer_id; })[0];
+        var n = b && b.pub && b.pub.defence ? b.pub.defence.n : 0;
+        if (!n || pl.seen[o.id] === n) return;
+        pl.seen[o.id] = n;
+        if (r() > 0.75) return;                                  // some sellers never hear about it
+        var price = Math.round(o.price - (o.price - s.card.floor) * (0.3 + r() * 0.5));
+        var pilot = o.pilot || s.card.assets.indexOf("pilot_ready") >= 0 || r() < 0.4;
+        if (price === o.price && pilot === o.pilot) return;
+        job = ctx.api.revise(ctx.code, s.token, o.id, price, pilot, s.card.assets.slice());
+      });
+      return job;
+    },
+
     buyerLook: function (ctx, hs, b, pl, frac) {
       var r = bots.rnd;
       var byId = {};
@@ -156,16 +218,28 @@
       pending.forEach(function (o) {
         if (!pl.scores[o.id]) pl.scores[o.id] = bots.scoreOffer(b, o, byId[o.seller_id].pub, ctx.cfg);
       });
-      var threshold = 84 - 20 * frac;
+      // The incumbent's standing counter-offer raises the bar a start-up has to clear.
+      var made = E.counters(b.card), level = made.length, standing = E.standing(b.card, level);
+      var stayGain = E.stayValue(standing, ctx.cfg).total - ctx.cfg.points.incumbent;
+      var threshold = 84 - 20 * frac + stayGain * 0.9;
+      // An edited term sheet is scored again.
+      pending.forEach(function (o) {
+        var key = o.price + ":" + (o.pilot ? 1 : 0) + ":" + (o.proof || []).length;
+        if (pl.scores[o.id].key !== key) { pl.scores[o.id] = bots.scoreOffer(b, o, byId[o.seller_id].pub, ctx.cfg); pl.scores[o.id].key = key; }
+      });
       var best = pending.slice().sort(function (x, y) { return pl.scores[y.id].total - pl.scores[x.id].total; })[0];
       if (best && pl.scores[best.id].total >= threshold) {
         pl.reason = pl.scores[best.id].top;
         return ctx.api.decide(ctx.code, b.token, best.id, true, null, best.price);
       }
-      if (frac >= pl.giveUp) {
-        if (pl.abstain) return null;
+      // Take the counter-offer: at the end, or sooner when it is the final one, or when nobody has come to pitch.
+      var takeNow = standing && (
+        (standing.kind === "final" && (!best || pl.scores[best.id].total < threshold - 6) && r() < 0.3) ||
+        (standing.kind === "early" && !pending.length && r() < 0.12));
+      if (frac >= pl.giveUp || takeNow) {
+        if (pl.abstain && !takeNow) return null;
         pl.reason = "incumbent";
-        return ctx.api.incumbent(ctx.code, b.token);
+        return ctx.api.incumbent(ctx.code, b.token, level);
       }
       var weak = pending.filter(function (o) { return pl.scores[o.id].total < threshold - 22; })[0];
       if (weak) return ctx.api.decide(ctx.code, b.token, weak.id, false, r() < 0.85 ? pl.scores[weak.id].why : null);
@@ -199,6 +273,9 @@
             if (p.offers_left > 0 && pl.sent < pl.sendAt.length && frac >= pl.sendAt[pl.sent]) {
               pl.sent++;
               job = bots.sellerOffer(ctx, hs, p);
+            } else if (hs.now >= pl.nextAnswer) {
+              pl.nextAnswer = hs.now + 4000 + bots.rnd() * 6000;
+              job = bots.sellerAnswer(ctx, hs, p, pl);
             }
           } else if (!p.decision && frac >= pl.wake && hs.now >= pl.nextLook) {
             pl.nextLook = hs.now + 2500 + bots.rnd() * 4000;
@@ -222,6 +299,7 @@
   };
 
   B2B.driver = driver;
+  B2B.rivals = rivals;
   B2B.bots = bots;
   B2B.leader = leader;
   B2B.hostRound = hostRound;

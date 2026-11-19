@@ -32,8 +32,28 @@
   "projectorRules": [
     "Stand up and talk. Sellers: find buyers in your category and pitch them face to face.",
     "Agreed something? The seller writes the term sheet on their phone, the buyer signs it. Buyers sign only 1 deal.",
-    "If a start-up fails to deliver, its buyer loses everything. Staying with the incumbent is always safe."
+    "If a start-up fails to deliver, its buyer loses everything. Staying with the incumbent is always safe.",
+    "The big vendors fight back. Every incumbent has an account manager who will counter a start-up's offer."
   ],
+
+  "rivals": {
+    "_readme": "DRAFT lines for the incumbents' account managers, who are played by the computer. Rewrite freely. {pct} = the discount, {startup} = the start-up they are answering, {incumbent} = the buyer's incumbent, {addon} = the extra from the list below.",
+    "role": "your account manager",
+    "early": "Nobody else has come to see you yet. Let's close your renewal today and I will take {pct}% off.",
+    "counter": "I hear {startup} has been at your desk. Stay with us and I will take {pct}% off, with nothing to migrate and nothing to explain to your boss.",
+    "final": "I took this to my vice president. Our final offer: {pct}% off, plus {addon}.",
+    "attack": {
+      "reference": "Ask {startup} to name one enterprise that already runs on them.",
+      "security_cert": "Has anyone audited {startup}'s security? Ours is certified.",
+      "pilot": "{startup} wants a full contract without a pilot. Ask them why.",
+      "young": "Ask yourself whether {startup} will still be in business in three years."
+    },
+    "addons": {
+      "lowest_cost": "a three-year price freeze",
+      "lowest_risk": "a named support team and a service guarantee",
+      "fastest_deployment": "our fast-track rollout team"
+    }
+  },
 
   "exitQuestion": {
     "buyer": "Main reason for your decision?",

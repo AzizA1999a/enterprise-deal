@@ -56,6 +56,10 @@
       var t = b.constraint && b.constraint.type;
       if (["requires_proof", "requires_pilot", "min_savings", "max_deploy_weeks"].indexOf(t) < 0) problems.push("Buyer " + b.id + ': unknown constraint type "' + t + '".');
     });
+    if (cards.rivals) {
+      ["early", "counter", "final"].forEach(function (k) { if (!cards.rivals[k]) problems.push('rivals: the "' + k + '" message is missing.'); });
+      Object.keys(cards.priorities).forEach(function (k) { if (!(cards.rivals.addons || {})[k]) problems.push('rivals: no add-on text for priority "' + k + '".'); });
+    }
     return problems;
   }
 
@@ -243,10 +247,67 @@
            key === "fastest_deployment" ? "Met when the start-up deploys in " + r.fastestDeployWeeks + " weeks or less." : "";
   }
 
+  // ---------- the incumbent fights back ----------
+  // A buyer's incumbent is played by the computer. Its counter-offers are kept on the
+  // buyer's card as card.incumbent.counters = [{ kind, pct, addon, attack, vs, sig, at, t }].
+  function counters(card) { return (card && card.incumbent && card.incumbent.counters) || []; }
+  // The counter-offer a buyer accepted: `level` is how many counter-offers they had seen when they chose to stay.
+  function standing(card, level) {
+    var list = counters(card);
+    return level > 0 && list.length ? list[Math.min(level, list.length) - 1] : null;
+  }
+  // What staying is worth with a given counter-offer (or with none).
+  function stayValue(counter, cfg) {
+    var P = cfg.points, parts = [{ label: "Stayed with the incumbent", value: P.incumbent }];
+    if (counter) {
+      if (counter.pct) parts.push({ label: "Counter-offer: " + counter.pct + "% off your renewal", value: Math.round(counter.pct * P.perPercentSaved) });
+      if (counter.addon) parts.push({ label: "Counter-offer: an extra that fits your priority", value: (cfg.rivals || {}).addonPoints || 0 });
+    }
+    return { total: parts.reduce(function (s, x) { return s + x.value; }, 0), parts: parts };
+  }
+
+  // Should this buyer's incumbent make a (new) counter-offer right now? Pure: the caller handles the timing.
+  // buyer = { card }, offers = every offer this buyer received, pubs = seller id -> pub, opts.early = the early-renewal moment has come.
+  function rivalCounter(buyer, offers, pubs, cfg, opts) {
+    var R = cfg.rivals;
+    if (!R || !R.on) return null;
+    var card = buyer.card, list = counters(card), last = list[list.length - 1];
+    if (list.length >= R.maxCounters || (last && last.kind === "final")) return null;
+    var live = offers.filter(function (o) { return o.status === "pending" && o.price <= card.budget; });
+    if (!live.length) {
+      // Nobody has reached this buyer yet: try to close the renewal before a start-up gets in the door.
+      if (!list.length && !offers.length && opts && opts.early) return { kind: "early", pct: R.earlyDiscount, addon: false, attack: null, vs: null, sig: "" };
+      return null;
+    }
+    var best = null, bestSav = -Infinity;
+    live.forEach(function (o) {
+      var f = fit(card, o, pubs[o.seller_id], cfg);
+      if (f.savingsPct > bestSav) { best = o; bestSav = f.savingsPct; }
+    });
+    // Only react to something new: a new term sheet, or better terms on an old one.
+    var sig = live.map(function (o) { return o.id + ":" + o.price + ":" + (o.pilot ? 1 : 0) + ":" + (o.proof || []).length; }).sort().join("|");
+    if (last && last.sig === sig) return null;
+    var answered = list.filter(function (c) { return c.kind !== "early"; }).length;
+    var isFinal = answered >= 1 || list.length >= R.maxCounters - 1;
+    var prev = last ? last.pct : 0;
+    var want = Math.round(Math.max(0, bestSav) * (isFinal ? R.finalMatchShare : R.matchShare));
+    var pct = clamp(Math.max(want, R.firstDiscount, prev + (isFinal ? R.finalStep || 0 : 0)), prev, R.maxDiscount);
+    var proof = best.proof || [];
+    var attack = proof.indexOf("reference") < 0 ? "reference" : proof.indexOf("security_cert") < 0 ? "security_cert" : !best.pilot ? "pilot" : "young";
+    var pub = pubs[best.seller_id] || {};
+    return { kind: isFinal ? "final" : "counter", pct: pct, addon: isFinal, attack: attack, vs: pub.org || null, sig: sig };
+  }
+
   // offer = the accepted offer (with delivered true/false), or null when the buyer stayed with the incumbent.
-  function buyerPoints(buyerCard, offer, sellerPub, cfg) {
+  // stay = { decision, level } of a buyer who did not sign a start-up.
+  function buyerPoints(buyerCard, offer, sellerPub, cfg, stay) {
     var P = cfg.points;
-    if (!offer) return { total: P.incumbent, parts: [{ label: "Stayed with the incumbent", value: P.incumbent }] };
+    if (!offer) {
+      if (stay && stay.decision === "incumbent_default" && counters(buyerCard).length) {
+        return { total: P.incumbent, parts: [{ label: "Never decided: renewed at the full price", value: P.incumbent }] };
+      }
+      return stayValue(stay && stay.decision === "incumbent" ? standing(buyerCard, stay.level) : null, cfg);
+    }
     if (offer.delivered === false) {
       return offer.pilot
         ? { total: P.failedWithPilot, parts: [{ label: "Start-up failed, but the pilot limited the damage", value: P.failedWithPilot }] }
@@ -299,7 +360,7 @@
       if (p.role === "seller") playerPatch.push({ id: p.id, points: sellerTotals[p.id] || 0 });
       else if (p.role === "buyer") {
         var d = buyerDeal[p.id];
-        playerPatch.push({ id: p.id, points: buyerPoints(p.card, d ? d.offer : null, d ? d.sellerPub : null, cfg).total });
+        playerPatch.push({ id: p.id, points: buyerPoints(p.card, d ? d.offer : null, d ? d.sellerPub : null, cfg, { decision: p.decision, level: p.stay_level }).total });
       }
     });
     return { offers: offerPatch, players: playerPatch };
@@ -317,6 +378,7 @@
     validateCards: validateCards, categoriesInPlay: categoriesInPlay,
     assign: assign, assignLate: assignLate,
     fit: fit, priorityRule: priorityRule, buyerPoints: buyerPoints, sellerDealPoints: sellerDealPoints,
+    counters: counters, standing: standing, stayValue: stayValue, rivalCounter: rivalCounter,
     needsResolve: needsResolve, resolve: resolve, remainingMs: remainingMs
   };
 })(typeof window !== "undefined" ? window : globalThis);

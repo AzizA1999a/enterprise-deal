@@ -113,7 +113,30 @@
       noProof: failRate(resolved.filter(function (r) { return r.s.card.assets.length === 0; }))
     };
 
+    // --- the incumbents' account managers ---
+    var E = B2B.engine;
+    function made(b) { return E.counters(b.card); }
+    function took(b) { return b.decision === "incumbent" ? E.standing(b.card, b.stay_level) : null; }
+    var pitched = buyers.filter(function (b) { return rows.some(function (r) { return r.b.id === b.id; }); });
+    var notPitched = buyers.filter(function (b) { return pitched.indexOf(b) < 0; });
+    var wonBack = pitched.filter(took);
+    var kept = buyers.filter(took);
+    var defence = {
+      on: buyers.some(function (b) { return made(b).length > 0; }),
+      counters: buyers.reduce(function (n, b) { return n + made(b).length; }, 0),
+      buyersCountered: buyers.filter(function (b) { return made(b).length > 0; }).length,
+      pitched: pitched.length,
+      signed: pitched.filter(function (b) { return b.decision === "startup"; }).length,
+      wonBack: wonBack.length,
+      stayedPlain: pitched.filter(function (b) { return b.decision !== "startup" && !took(b); }).length,
+      notPitched: notPitched.length,
+      earlyLocked: notPitched.filter(took).length,
+      avgDiscount: avg(kept.map(function (b) { return took(b).pct; })),
+      leverage: rows.filter(function (r) { return wonBack.indexOf(r.b) >= 0; }).length
+    };
+
     return {
+      defence: defence,
       simulated: full.players.filter(function (p) { return p.is_bot; }).length,
       counts: { players: players.length, sellers: sellers.length, buyers: buyers.length, offers: rows.length, deals: wins.length },
       quick: quick, byConnType: byConnType, pilot: pilot, proof: proof, price: price,
@@ -141,7 +164,7 @@
       "proof_pilot_ready", "status", "accepted", "reject_reason", "decided_at", "decided_seconds_from_market_open",
       "delivered", "seller_true_reliability", "buyer_hidden_priority", "buyer_boss_constraint", "fits_priority",
       "meets_boss_constraint", "cheapest_offer_buyer_received", "seller_exit_answer", "buyer_exit_answer",
-      "seller_simulated", "buyer_simulated"];
+      "seller_simulated", "buyer_simulated", "incumbent_counter_offers_to_buyer", "buyer_took_incumbent_counter_offer"];
     var rows = offerRows(full);
     var lines = rows.map(function (r) {
       var o = r.o, f = E.fit(r.b.card, o, r.s.pub, cfg), proof = o.proof || [];
@@ -151,7 +174,8 @@
         r.s.card.list, r.s.card.floor, r.b.card.budget, yn(o.pilot), yn(proof.indexOf("reference") >= 0),
         yn(proof.indexOf("security_cert") >= 0), yn(proof.indexOf("pilot_ready") >= 0), o.status, yn(r.won), o.reason,
         iso(o.decided_at), o.decided_t, yn(o.delivered), r.s.card.reliability, r.b.card.priority, r.b.card.constraint.text,
-        yn(f.priorityMet), yn(f.constraintMet), yn(o.price === min), r.s.exit_answer, r.b.exit_answer, yn(r.s.is_bot), yn(r.b.is_bot)];
+        yn(f.priorityMet), yn(f.constraintMet), yn(o.price === min), r.s.exit_answer, r.b.exit_answer, yn(r.s.is_bot), yn(r.b.is_bot),
+        E.counters(r.b.card).length, yn(r.b.decision === "incumbent" && !!E.standing(r.b.card, r.b.stay_level))];
     });
     return toCsv(header, lines);
   }
@@ -159,7 +183,8 @@
   function playersCsv(full, cards) {
     var header = ["name", "simulated", "role", "category", "organisation", "connections", "connection_details",
       "offers_sent", "offers_received", "deals_won", "decision", "decided_seconds_from_market_open", "points",
-      "exit_answer", "joined_at"];
+      "exit_answer", "joined_at", "incumbent_counter_offers", "incumbent_deepest_discount_pct",
+      "incumbent_discount_accepted_pct", "incumbent_extra_accepted"];
     var lines = full.players.map(function (p) {
       var conns = p.card ? p.card.connections : [];
       var sent = full.offers.filter(function (o) { return o.seller_id === p.id; });
@@ -168,7 +193,11 @@
         conns.map(function (c) { return c.name + " (" + cards.relationships[c.type] + ")"; }).join("; "),
         p.role === "seller" ? sent.length : "", p.role === "buyer" ? got.length : "",
         p.role === "seller" ? sent.filter(function (o) { return o.status === "accepted"; }).length : "",
-        p.decision, p.decided_t, p.points, p.exit_answer, iso(p.joined_at)];
+        p.decision, p.decided_t, p.points, p.exit_answer, iso(p.joined_at)].concat((function () {
+          if (p.role !== "buyer") return ["", "", "", ""];
+          var made = B2B.engine.counters(p.card), took = p.decision === "incumbent" ? B2B.engine.standing(p.card, p.stay_level) : null;
+          return [made.length, made.length ? made[made.length - 1].pct : "", took ? took.pct : "", took ? yn(took.addon) : ""];
+        })());
     });
     return toCsv(header, lines);
   }

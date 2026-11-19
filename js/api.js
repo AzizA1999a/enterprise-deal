@@ -56,7 +56,8 @@
   function playerRow(p, withToken) {
     var r = { id: p.id, name: p.name, role: p.role, category: p.category, card: p.card, pub: p.pub, is_bot: p.is_bot,
               offers_left: p.offers_left, decision: p.decision, decided_at: p.decided_at, decided_t: p.decided_t,
-              points: p.points, exit_answer: p.exit_answer, exit_at: p.exit_at, joined_at: p.joined_at };
+              points: p.points, exit_answer: p.exit_answer, exit_at: p.exit_at, joined_at: p.joined_at,
+              stay_level: p.stay_level == null ? null : p.stay_level };
     if (withToken) r.token = p.token;
     return r;
   }
@@ -123,7 +124,8 @@
         now: Date.now(), game: gameView(g), n_offers: g.offers.length,
         players: g.players.map(function (p) {
           return { id: p.id, name: p.name, role: p.role, is_bot: p.is_bot, org: p.pub ? p.pub.org : null,
-                   decision: p.decision, decided_t: p.decided_t, exit_done: !!p.exit_answer };
+                   decision: p.decision, decided_t: p.decided_t, exit_done: !!p.exit_answer,
+                   defence: p.pub && p.pub.defence ? p.pub.defence : null };
         }),
         deals: g.offers.filter(function (o) { return o.status === "accepted"; })
           .map(function (o) { return { seller_id: o.seller_id, buyer_id: o.buyer_id, decided_t: o.decided_t, delivered: o.delivered }; }),
@@ -197,17 +199,20 @@
       return { ok: true };
     },
 
-    incumbent: function (code, token) {
+    // seen = how many counter-offers from the incumbent the buyer had on screen when they chose to stay.
+    incumbent: function (code, token, seen) {
       var g = need(code), me = byToken(g, token);
       if (!me || me.role !== "buyer") throw fail("not_joined");
       openOnly(g);
       if (me.decision) throw fail("already_decided");
       var now = Date.now(), t = clock(g, now);
+      var made = ((me.card.incumbent || {}).counters || []).length;
+      me.stay_level = Math.max(0, Math.min(made, Math.floor(Number(seen) || 0)));
       me.decision = "incumbent"; me.decided_at = now; me.decided_t = t;
       g.offers.forEach(function (x) {
         if (x.buyer_id === me.id && x.status === "pending") { x.status = "lost_incumbent"; x.decided_at = now; x.decided_t = t; }
       });
-      log(g, "incumbent", me.id, null);
+      log(g, "incumbent", me.id, { counter_offers_seen: me.stay_level });
       save(g);
       return { ok: true };
     },
@@ -277,6 +282,7 @@
         if (!o) return;
         ["delivered", "seller_points"].forEach(function (k) { if (u[k] != null) o[k] = u[k]; });
       });
+      (patch.events || []).forEach(function (e) { log(g, String(e.type), e.actor || null, e.data || null); });
       save(g);
       return { ok: true };
     }
@@ -325,7 +331,7 @@
     decide: function (code, token, offerId, accept, reason, expectPrice) {
       return rpc("sim_decide", { p_code: code, p_token: token, p_offer: offerId, p_accept: !!accept, p_reason: reason || null, p_expect_price: expectPrice == null ? null : expectPrice });
     },
-    incumbent: function (code, token) { return rpc("sim_incumbent", { p_code: code, p_token: token }); },
+    incumbent: function (code, token, seen) { return rpc("sim_incumbent", { p_code: code, p_token: token, p_seen: Math.floor(Number(seen) || 0) }); },
     exit: function (code, token, answer) { return rpc("sim_exit", { p_code: code, p_token: token, p_answer: answer }); },
     hostState: function (code, pin) { return rpc("sim_host_state", { p_code: code, p_pin: String(pin) }); },
     hostEvents: function (code, pin) { return rpc("sim_host_events", { p_code: code, p_pin: String(pin) }); },
