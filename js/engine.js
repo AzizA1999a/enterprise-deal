@@ -27,6 +27,13 @@
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
   var ROMAN = ["", "", " II", " III", " IV", " V", " VI"];
+  // Stable pseudo-random number in [0,1) from a string, so two host screens always agree.
+  function hash01(str) {
+    var h = 2166136261;
+    for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+    h ^= h >>> 13; h = Math.imul(h, 0x5bd1e995); h ^= h >>> 15;
+    return (h >>> 0) / 4294967296;
+  }
 
   // ---------- card file checks ----------
   function validateCards(cards) {
@@ -59,10 +66,11 @@
   }
 
   function makeCtx(assigned, cards, cfg, rnd) {
-    var ctx = { cards: cards, cfg: cfg, rnd: rnd, players: [], used: {}, dirty: {} };
+    var ctx = { cards: cards, cfg: cfg, rnd: rnd, players: [], used: {}, dirty: {}, desks: {} };
     (assigned || []).forEach(function (p) {
       var w = { id: p.id, name: p.name, role: p.role, category: p.category, card: clone(p.card) };
       ctx.players.push(w);
+      if (w.card && w.card.desk) ctx.desks[w.card.desk] = true;
       if (w.card && w.card.templateId) ctx.used[w.card.templateId] = (ctx.used[w.card.templateId] || 0) + 1;
     });
     return ctx;
@@ -92,6 +100,13 @@
         incumbent: { name: t.incumbent.name, price: t.incumbent.price },
         priority: t.priority, constraint: clone(t.constraint), connections: []
       };
+      // A desk number only the buyer can see: a seller has to walk over and ask for it.
+      if (ctx.cfg.requireMeetingCode) {
+        var desk;
+        do { desk = String(10 + Math.floor(ctx.rnd() * 90)); } while (ctx.desks[desk] && Object.keys(ctx.desks).length < 90);
+        ctx.desks[desk] = true;
+        card.desk = desk;
+      }
       pub = { org: card.org, title: card.title, category: category, need: card.need };
     }
     var w = { id: p.id, name: p.name, role: role, category: category, card: card, pub: pub, isNew: true };
@@ -272,7 +287,7 @@
     offers.forEach(function (o) {
       if (o.status !== "accepted") return;
       var seller = byId[o.seller_id];
-      var delivered = o.delivered != null ? o.delivered : rnd() < seller.card.reliability;
+      var delivered = o.delivered != null ? o.delivered : hash01("delivery:" + o.id) < seller.card.reliability;
       var resolved = { price: o.price, pilot: o.pilot, proof: o.proof, delivered: delivered };
       var sp = sellerDealPoints(seller.card, resolved, cfg);
       sellerTotals[o.seller_id] = (sellerTotals[o.seller_id] || 0) + sp;
@@ -298,7 +313,7 @@
   }
 
   B2B.engine = {
-    makeRng: makeRng, shuffle: shuffle, pick: pick, clone: clone, clamp: clamp,
+    makeRng: makeRng, hash01: hash01, shuffle: shuffle, pick: pick, clone: clone, clamp: clamp,
     validateCards: validateCards, categoriesInPlay: categoriesInPlay,
     assign: assign, assignLate: assignLate,
     fit: fit, priorityRule: priorityRule, buyerPoints: buyerPoints, sellerDealPoints: sellerDealPoints,

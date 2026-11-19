@@ -10,12 +10,16 @@ window.B2B_CONFIG = {
   title: "The Enterprise Deal",
   subtitle: "A B2B selling simulation",
 
+  // The presenting team, in speaking order. Used on the slides ("Lead: ...").
+  team: ["Speaker 1", "Speaker 2", "Speaker 3", "Speaker 4", "Speaker 5"],
+
   // Role split and timing.
   sellerShare: 0.6,          // about 60% sellers, 40% buyers
   briefingSeconds: 60,       // role card reading time before the market opens
-  marketSeconds: 390,        // 6.5 minutes
+  marketSeconds: 600,        // 10 minutes of walking and talking
   extendSeconds: 60,         // the "+1 minute" button
-  offersPerSeller: 3,
+  offersPerSeller: 3,        // term sheets a seller can open (each can be edited while it is unanswered)
+  requireMeetingCode: true,  // a seller needs the buyer's desk number, shown only on the buyer's phone
   minBuyersPerCategory: 2,   // fewer categories are used when the class is small
 
   // Connections: share of sellers who get 0, 1 or 2 connections.

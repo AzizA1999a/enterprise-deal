@@ -50,7 +50,8 @@
   function offerView(o) {
     return { id: o.id, seller_id: o.seller_id, buyer_id: o.buyer_id, price: o.price, pilot: o.pilot, proof: o.proof,
              status: o.status, reason: o.reason, created_at: o.created_at, sent_t: o.sent_t,
-             decided_at: o.decided_at, decided_t: o.decided_t, delivered: o.delivered, seller_points: o.seller_points };
+             decided_at: o.decided_at, decided_t: o.decided_t, delivered: o.delivered, seller_points: o.seller_points,
+             revisions: o.revisions || 0 };
   }
   function playerRow(p, withToken) {
     var r = { id: p.id, name: p.name, role: p.role, category: p.category, card: p.card, pub: p.pub, is_bot: p.is_bot,
@@ -130,7 +131,7 @@
       };
     },
 
-    offer: function (code, token, buyerId, price, pilot, proof) {
+    offer: function (code, token, buyerId, price, pilot, proof, desk) {
       var g = need(code), me = byToken(g, token);
       if (!me || me.role !== "seller") throw fail("not_joined");
       openOnly(g);
@@ -138,13 +139,15 @@
       var b = byId(g.players, buyerId);
       if (!b || b.role !== "buyer" || b.category !== me.category) throw fail("wrong_category");
       if (b.decision) throw fail("buyer_closed");
+      if (b.card.desk && String(desk || "").trim() !== String(b.card.desk)) throw fail("bad_desk");
+      if (g.offers.some(function (x) { return x.seller_id === me.id && x.buyer_id === b.id && x.status === "pending"; })) throw fail("already_pitched");
       price = Number(price);
       if (!(price >= me.card.floor && price <= me.card.list)) throw fail("bad_price");
       proof = (proof || []).slice();
       if (proof.some(function (a) { return me.card.assets.indexOf(a) < 0; })) throw fail("bad_proof");
       var now = Date.now();
       var o = { id: uid(), seller_id: me.id, buyer_id: b.id, price: price, pilot: !!pilot, proof: proof, status: "pending",
-                reason: null, created_at: now, sent_t: clock(g, now), decided_at: null, decided_t: null, delivered: null, seller_points: null };
+                reason: null, created_at: now, sent_t: clock(g, now), decided_at: null, decided_t: null, delivered: null, seller_points: null, revisions: 0 };
       g.offers.push(o);
       me.offers_left -= 1;
       log(g, "offer", me.id, { offer: o.id, buyer: b.id, price: price, pilot: !!pilot, proof: proof });
@@ -152,7 +155,24 @@
       return { id: o.id };
     },
 
-    decide: function (code, token, offerId, accept, reason) {
+    // Change the terms of a term sheet the buyer has not answered yet. Free: it does not use up an offer.
+    revise: function (code, token, offerId, price, pilot, proof) {
+      var g = need(code), me = byToken(g, token);
+      if (!me || me.role !== "seller") throw fail("not_joined");
+      openOnly(g);
+      var o = byId(g.offers, offerId);
+      if (!o || o.seller_id !== me.id || o.status !== "pending") throw fail("offer_gone");
+      price = Number(price);
+      if (!(price >= me.card.floor && price <= me.card.list)) throw fail("bad_price");
+      proof = (proof || []).slice();
+      if (proof.some(function (a) { return me.card.assets.indexOf(a) < 0; })) throw fail("bad_proof");
+      log(g, "revise", me.id, { offer: o.id, buyer: o.buyer_id, from: { price: o.price, pilot: o.pilot, proof: o.proof }, to: { price: price, pilot: !!pilot, proof: proof } });
+      o.price = price; o.pilot = !!pilot; o.proof = proof; o.revisions = (o.revisions || 0) + 1;
+      save(g);
+      return { ok: true };
+    },
+
+    decide: function (code, token, offerId, accept, reason, expectPrice) {
       var g = need(code), me = byToken(g, token);
       if (!me || me.role !== "buyer") throw fail("not_joined");
       openOnly(g);
@@ -161,6 +181,7 @@
       var now = Date.now(), t = clock(g, now);
       if (accept) {
         if (me.decision) throw fail("already_decided");
+        if (expectPrice != null && Number(expectPrice) !== o.price) throw fail("offer_changed");
         if (o.price > me.card.budget) throw fail("over_budget");
         o.status = "accepted"; o.decided_at = now; o.decided_t = t;
         g.offers.forEach(function (x) {
@@ -295,11 +316,14 @@
     join: function (code, name, token, bot) { return rpc("sim_join", { p_code: code, p_name: name, p_token: token, p_bot: !!bot }); },
     state: function (code, token) { return rpc("sim_state", { p_code: code, p_token: token }); },
     public: function (code) { return rpc("sim_public", { p_code: code }); },
-    offer: function (code, token, buyerId, price, pilot, proof) {
-      return rpc("sim_offer", { p_code: code, p_token: token, p_buyer: buyerId, p_price: price, p_pilot: !!pilot, p_proof: proof || [] });
+    offer: function (code, token, buyerId, price, pilot, proof, desk) {
+      return rpc("sim_offer", { p_code: code, p_token: token, p_buyer: buyerId, p_price: price, p_pilot: !!pilot, p_proof: proof || [], p_desk: desk == null ? null : String(desk) });
     },
-    decide: function (code, token, offerId, accept, reason) {
-      return rpc("sim_decide", { p_code: code, p_token: token, p_offer: offerId, p_accept: !!accept, p_reason: reason || null });
+    revise: function (code, token, offerId, price, pilot, proof) {
+      return rpc("sim_revise", { p_code: code, p_token: token, p_offer: offerId, p_price: price, p_pilot: !!pilot, p_proof: proof || [] });
+    },
+    decide: function (code, token, offerId, accept, reason, expectPrice) {
+      return rpc("sim_decide", { p_code: code, p_token: token, p_offer: offerId, p_accept: !!accept, p_reason: reason || null, p_expect_price: expectPrice == null ? null : expectPrice });
     },
     incumbent: function (code, token) { return rpc("sim_incumbent", { p_code: code, p_token: token }); },
     exit: function (code, token, answer) { return rpc("sim_exit", { p_code: code, p_token: token, p_answer: answer }); },
@@ -336,6 +360,10 @@
       buyer_closed: "That buyer has already decided.",
       bad_price: "The price must be between your floor and your list price.",
       bad_proof: "You can only show proof you actually hold.",
+      bad_desk: "That is not their desk number. Ask them to show you their badge.",
+      already_pitched: "You already have an open term sheet with this buyer. Edit that one.",
+      offer_changed: "The seller just changed these terms. Check them again.",
+      bad_arg: "That action could not be completed.",
       already_decided: "You have already made your decision.",
       over_budget: "That price is over your budget.",
       offer_gone: "That offer is no longer open.",

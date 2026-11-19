@@ -7,6 +7,37 @@
   var B2B = (root.B2B = root.B2B || {});
   var E = B2B.engine;
 
+  // Only one tab in this browser may run the automatic steps and the bots for a game,
+  // so the host panel and the slides can both be open without stepping on each other.
+  var leader = {
+    held: {}, asked: {},
+    has: function (code) {
+      if (!leader.asked[code]) {
+        leader.asked[code] = true;
+        if (root.navigator && root.navigator.locks) {
+          root.navigator.locks.request("b2bsim-driver-" + code, function () {
+            leader.held[code] = true;
+            return new Promise(function () {}); // keep it until this tab closes
+          });
+        } else {
+          leader.held[code] = true;
+        }
+      }
+      return !!leader.held[code];
+    }
+  };
+
+  // One round of host duties: read the game, run automatic steps, let bots act. Returns the state.
+  function hostRound(ctx, botsOn) {
+    return ctx.api.hostState(ctx.code, ctx.pin).then(function (hs) {
+      if (!leader.has(ctx.code)) return hs;
+      return driver.tick(ctx, hs).then(function (changed) {
+        if (changed || !botsOn) return hs;
+        return bots.tick(ctx, hs).then(function () { return hs; });
+      });
+    });
+  }
+
   // ctx = { code, pin, cards, cfg, api }
   var driver = {
     busy: false,
@@ -112,7 +143,9 @@
       if (info && (info.constraint.type === "requires_pilot" || (info.priority === "lowest_risk" && r() < 0.8))) pilot = true;
       var proof = s.card.assets.slice();
       if (proof.length && r() > 0.9) proof.splice(Math.floor(r() * proof.length), 1);
-      return ctx.api.offer(ctx.code, s.token, target.id, price, pilot, proof);
+      var open2 = mine.filter(function (o) { return o.buyer_id === target.id && o.status === "pending"; })[0];
+      if (open2) return ctx.api.revise(ctx.code, s.token, open2.id, Math.min(open2.price, price), pilot || open2.pilot, proof);
+      return ctx.api.offer(ctx.code, s.token, target.id, price, pilot, proof, target.card.desk);
     },
 
     buyerLook: function (ctx, hs, b, pl, frac) {
@@ -127,7 +160,7 @@
       var best = pending.slice().sort(function (x, y) { return pl.scores[y.id].total - pl.scores[x.id].total; })[0];
       if (best && pl.scores[best.id].total >= threshold) {
         pl.reason = pl.scores[best.id].top;
-        return ctx.api.decide(ctx.code, b.token, best.id, true, null);
+        return ctx.api.decide(ctx.code, b.token, best.id, true, null, best.price);
       }
       if (frac >= pl.giveUp) {
         if (pl.abstain) return null;
@@ -190,4 +223,6 @@
 
   B2B.driver = driver;
   B2B.bots = bots;
+  B2B.leader = leader;
+  B2B.hostRound = hostRound;
 })(typeof window !== "undefined" ? window : globalThis);

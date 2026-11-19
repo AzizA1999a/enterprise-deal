@@ -1,28 +1,35 @@
-/* The colour palette. Change these values to match your slide deck;
-   every screen (phones, projector, host panel) uses only these. */
+/* One theme for the slides, the phones, the projector and the host panel.
+   The look is a two-colour print: navy and vermilion ink on warm paper,
+   matching the illustrations in /art. Change the values here to restyle everything. */
+@import url("https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600;700&display=swap");
+
 :root {
-  --bg: #f5f2ec;          /* page background */
-  --surface: #ffffff;     /* cards and panels */
-  --ink: #15233b;         /* main text */
-  --muted: #5d6779;       /* secondary text */
-  --line: #ddd8cd;        /* borders and dividers */
+  --bg: #fbdfba;          /* paper: matches the illustration backgrounds */
+  --surface: #fff6e6;     /* cards and panels */
+  --ink: #1c2150;         /* navy ink: text, borders, hard shadows */
+  --muted: #5d5f86;       /* secondary text */
+  --line: #e3c08f;        /* quiet dividers */
 
-  --brand: #1d4e89;       /* headers, primary buttons */
-  --brand-ink: #ffffff;   /* text on top of --brand */
-  --brand-soft: #e6eef8;  /* pale tint of the brand colour */
+  --brand: #262d6b;       /* navy blocks: headers, primary buttons */
+  --brand-ink: #fff6e6;   /* text on navy */
+  --brand-soft: #e6e0e4;  /* pale navy tint */
 
-  --accent: #d9730d;      /* highlights: connections, the key number */
-  --accent-soft: #fbeedd;
+  --accent: #ee4f1f;      /* vermilion: the one loud colour */
+  --accent-ink: #fff6e6;
+  --accent-soft: #fbd0b3;
+  --accent-text: #a8300b; /* vermilion dark enough to read as text */
 
-  --good: #1e7f55;        /* delivered, accepted */
-  --good-soft: #e2f3ea;
-  --bad: #b93a2b;         /* failed, rejected, warnings */
-  --bad-soft: #f9e5e1;
+  --good: #1b7a52;        /* delivered, signed */
+  --good-soft: #d9ecd9;
+  --bad: #b3261e;         /* failed, rejected */
+  --bad-soft: #f8d3c8;
 
-  --chart-1: #2a6fbb;     /* bars */
-  --chart-base: #8e97a6;  /* the comparison bar (no connection, no proof) */
-  --chart-track: #ece8df; /* the empty part of a bar */
+  --chart-1: #3a47a8;     /* bars */
+  --chart-base: #b59f84;  /* the comparison bar (no connection, no proof) */
+  --chart-track: #f1d3a8; /* the empty part of a bar */
 
-  --font: "Avenir Next", "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
+  --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --font: "Instrument Sans", "Avenir Next", "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
   --radius: 14px;
+  --shadow: 4px 4px 0 var(--ink);   /* the hard "print" shadow */
 }

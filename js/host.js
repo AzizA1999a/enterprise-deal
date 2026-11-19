@@ -40,7 +40,7 @@
   function shellView() {
     var url = joinUrl();
     return '<div class="row"><div><div class="label">Host panel · ' + modeName() + "</div><h1>Game <code>" + esc(H.sess.code) + '</code> <span class="muted" style="font-size:0.6em;font-weight:500">PIN ' + esc(H.sess.pin) + "</span></h1></div>" +
-      '<div class="inline"><a class="btn small primary" href="screen.html?g=' + esc(H.sess.code) + '" target="_blank" rel="noopener">Open projector screen</a><button class="btn small" data-act="leave">Leave this game</button></div></div>' +
+      '<div class="inline"><a class="btn small primary" href="deck.html?g=' + esc(H.sess.code) + '" target="_blank" rel="noopener">Open the presentation</a><a class="btn small" href="screen.html?g=' + esc(H.sess.code) + '" target="_blank" rel="noopener">Projector only</a><button class="btn small" data-act="leave">Leave this game</button></div></div>' +
       (B2B.mode === "online" ? '<p class="muted" style="margin-top:6px">Phones join at <a href="' + esc(url) + '" target="_blank" rel="noopener">' + esc(url) + "</a></p>" : "") +
       (H.problems.length ? '<div class="card warn" style="margin-top:12px"><b>Problems in data/cards.json</b><ul>' + H.problems.map(function (p) { return "<li>" + esc(p) + "</li>"; }).join("") + "</ul></div>" : "") +
       '<div class="grid"><div class="card stack" id="status"></div><div><div class="card stack"><h2>Demo mode</h2>' +
@@ -76,7 +76,7 @@
       g.phase === "briefing" ? "Players are reading their cards. The market opens by itself when the clock reaches zero." :
       g.phase === "open" ? "The market locks by itself at zero." :
       g.phase === "paused" ? "No offers or decisions while paused." :
-      "Projector view (the arrow keys on the projector window also switch it):";
+      "These buttons set the stand-alone projector screen. The slides show results on their own.";
     return '<div class="row"><div><div class="label">Phase</div><div class="phase">' + names[g.phase] + '</div></div><div style="text-align:right"><div class="label">Clock</div><div class="phase num" data-clock></div></div></div>' +
       '<div class="chips"><span class="chip plain num">' + P.length + ' players</span><span class="chip plain num">' + sellers + " sellers · " + buyers + ' buyers</span><span class="chip plain num">' + hs.offers.length +
       ' offers</span><span class="chip plain num">' + deals + ' deals</span><span class="chip plain num">' + stayed + ' stayed with incumbent</span>' +
@@ -180,15 +180,11 @@
     refresh = ui.loop(function () {
       if (!H.sess) return Promise.resolve();
       var c = ctx();
-      return api.hostState(c.code, c.pin).then(function (hs) {
+      var auto = document.getElementById("autobots");
+      return B2B.hostRound(c, !auto || auto.checked).then(function (hs) {
         ui.syncClock(hs.now);
         H.hs = hs;
         render();
-        return B2B.driver.tick(c, hs).then(function (changed) {
-          var auto = document.getElementById("autobots");
-          if (changed || !auto || !auto.checked) return changed;
-          return B2B.bots.tick(c, hs);
-        });
       }, function (e) {
         if (e.code === "no_game" || e.code === "bad_pin") { H.msg = "That game could not be opened: " + B2B.errorText(e); saveSess(null); render(); }
       });

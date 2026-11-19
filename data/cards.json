@@ -30,9 +30,9 @@
   "riskRule": "If you buy from a start-up and it fails to deliver, you lose all your points. Start-ups with no proof fail more often.",
 
   "projectorRules": [
-    "Sellers: you have 3 offers. Find a buyer, negotiate face to face, then send the offer on your phone.",
-    "Buyers: you can sign 1 deal, or stay with your incumbent at zero risk.",
-    "If a start-up fails to deliver, its buyer loses everything. Choose who to trust."
+    "Stand up and talk. Sellers: find buyers in your category and pitch them face to face.",
+    "Agreed something? The seller writes the term sheet on their phone, the buyer signs it. Buyers sign only 1 deal.",
+    "If a start-up fails to deliver, its buyer loses everything. Staying with the incumbent is always safe."
   ],
 
   "exitQuestion": {

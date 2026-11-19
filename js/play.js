@@ -33,7 +33,7 @@
   }
   function statusChip(o) {
     var s = o.status;
-    if (s === "pending") return '<span class="chip plain">Waiting for an answer</span>';
+    if (s === "pending") return '<span class="chip plain">Waiting for a signature</span>';
     if (s === "accepted") return '<span class="chip good">Deal signed</span>';
     if (s === "rejected") return '<span class="chip bad">Rejected' + (o.reason ? ": " + optLabel("rejectReasons", o.reason) : "") + "</span>";
     if (s === "lost") return '<span class="chip grey">Lost: buyer signed another start-up</span>';
@@ -53,14 +53,14 @@
         '</div><div class="muted">Buyer at ' + esc(k.org) + '</div><p style="margin-top:8px">Hidden priority: <b>' + label("priorities", k.priority) +
         "</b></p><p>Boss's rule: <b>" + esc(k.constraint.text) + "</b></p></div>";
     }).join("");
-    return '<div class="card stack"><div class="label">Your start-up</div><div class="bigname">' + esc(c.org) + "</div><p>" + esc(c.tagline) + "</p>" +
+    return '<div class="card stack"><div class="rolebanner"><img src="art/seller-s.jpg" alt=""></div><div class="label">Your start-up</div><div class="bigname">' + esc(c.org) + "</div><p>" + esc(c.tagline) + "</p>" +
       '<div class="kv"><div><div class="label">List price</div><div class="v num">' + money(c.list) + '</div></div><div><div class="label">Floor (never below)</div><div class="v num">' + money(c.floor) + "</div></div></div>" +
       "<p>Deploys in <b>" + c.deployWeeks + " weeks</b>. Prices are per year.</p></div>" +
       '<div class="card stack"><div class="label">Your proof</div>' +
       (c.assets.length ? '<div class="chips">' + proofChips(c.assets) + "</div>" : "<p><b>None.</b> You are selling on a promise.</p>") + "</div>" +
       '<div class="card stack"><div class="label">People you know</div>' +
       (conns || "<p><b>Nobody.</b> You are selling cold: you cannot see any buyer's priority.</p>") + "</div>" +
-      '<div class="card note stack"><div class="label">Rules</div><p>You can send <b>' + cfg.offersPerSeller + " offers</b> in the whole game. Talk first, then send.</p>" +
+      '<div class="card note stack"><div class="label">Rules</div><p><b>Walk over and talk.</b> When a buyer is interested, ask for their desk number and write the term sheet together. You can open <b>' + cfg.offersPerSeller + " term sheets</b> in the whole game, and edit one until it is signed or rejected.</p>" +
       '<p class="muted">Each delivered deal scores ' + P.sellerDeal + " points, plus up to " + P.sellerPriceHeld + " for keeping your price near list. A pilot costs you " + P.sellerPilotCost + ' points unless you are pilot-ready.</p></div>';
   }
   function buyerCard(c) {
@@ -69,17 +69,26 @@
       return '<div class="card conn"><span class="chip conn">' + label("relationships", k.type) + '</span><div class="bigname" style="margin-top:6px">' + esc(k.name) +
         '</div><div class="muted">Seller at ' + esc(k.org) + "</div><p style=\"margin-top:8px\">You know the truth: " + esc(k.org) + " <b>" + reliabilityText(k.reliability) + "</b>.</p></div>";
     }).join("");
-    return '<div class="card stack"><div class="label">You are the ' + esc(c.title) + ' at</div><div class="bigname">' + esc(c.org) + "</div><p>You need: " + esc(c.need) + "</p>" +
+    return '<div class="card stack"><div class="rolebanner"><img src="art/buyer-s.jpg" alt=""></div><div class="label">You are the ' + esc(c.title) + ' at</div><div class="bigname">' + esc(c.org) + "</div><p>You need: " + esc(c.need) + "</p>" +
       '<div class="kv"><div><div class="label">Budget</div><div class="v num">' + money(c.budget) + '</div></div><div><div class="label">Incumbent price</div><div class="v num">' + money(c.incumbent.price) + "</div></div></div>" +
       "<p>Your incumbent is <b>" + esc(c.incumbent.name) + "</b>. Staying is always possible and carries zero risk.</p></div>" +
       '<div class="card stack"><div class="label">Hidden priority (keep it to yourself)</div><div class="bigname">' + label("priorities", c.priority) + '</div><p class="muted">' + esc(E.priorityRule(c.priority, cfg)) + "</p>" +
       '<div class="label" style="margin-top:14px">Your boss\'s rule</div><p><b>' + esc(c.constraint.text) + "</b></p></div>" +
       '<div class="card warn stack"><div class="label" style="color:var(--bad)">Career risk</div><p><b>' + esc(S.cards.riskRule) + "</b></p></div>" +
       '<div class="card stack"><div class="label">People you know</div>' + (conns || "<p><b>Nobody.</b> You cannot check any start-up's real reliability.</p>") + "</div>" +
-      '<div class="card note stack"><div class="label">Rules</div><p>You can sign <b>1 deal</b>, or stay with your incumbent.</p>' +
+      '<div class="card note stack"><div class="label">Rules</div><p><b>Sellers will come to you.</b> Listen, push back, negotiate out loud.' + (c.desk ? " Give a seller your desk number <b>" + esc(c.desk) + "</b> only when you want their term sheet on your phone." : "") + " You can sign <b>1 deal</b>, or stay with your incumbent.</p>" +
       '<p class="muted">Staying scores ' + P.incumbent + " points. A start-up that delivers scores " + P.startupBase + ", plus 1 per 1% saved (up to " + P.savingsCap + "), plus " + P.priorityBonus + " if it fits your priority, minus " + P.constraintPenalty + " if it breaks your boss's rule.</p></div>";
   }
   function roleCard(me) { return me.role === "seller" ? sellerCard(me.card) : buyerCard(me.card); }
+  // A name tag to hold up while walking around the room.
+  function badge(me) {
+    var c = me.card, seller = me.role === "seller";
+    return '<div class="badge ' + me.role + '"><div class="strip">' + (seller ? "Start-up · selling" : "Enterprise · buying") + '</div><div class="who"><div class="n">' + esc(me.name) + '</div><div class="o">' +
+      esc(c.org) + '</div><div class="muted" style="margin-top:4px">' + esc(seller ? c.tagline : c.title + " · needs: " + c.need) + "</div></div>" +
+      '<div class="desk"><div class="label">' + esc(c.categoryName) + '</div><div class="muted">' +
+      (seller ? "Find buyers in your category, pitch them, then ask for their desk number." : "Your desk number is on your Inbox tab. Give it only to sellers you want a term sheet from.") + "</div></div>" +
+      "</div>" + '<p class="muted" style="text-align:center;margin-top:14px">Hold your phone up so people can find you.</p>';
+  }
   function roleLine(me) { return (me.role === "seller" ? "Seller" : "Buyer") + " · " + me.card.categoryName; }
 
   // ---------- seller market ----------
@@ -88,7 +97,7 @@
     var conn = {};
     me.card.connections.forEach(function (c) { conn[c.id] = c; });
     var left = me.offers_left, total = cfg.offersPerSeller;
-    var html = '<div class="card row"><div><div class="label">Offers left</div><div class="bigname num">' + left + " of " + total + '</div></div><div class="dots bigname" aria-hidden="true">' +
+    var html = '<div class="card row"><div><div class="label">Term sheets left</div><div class="bigname num">' + left + " of " + total + '</div></div><div class="dots bigname" aria-hidden="true">' +
       "●".repeat(Math.max(0, left)) + "○".repeat(Math.max(0, total - left)) + "</div></div>";
     function rank(b) { return b.decided ? 2 : conn[b.id] ? 0 : 1; }
     var buyers = st.buyers.slice().sort(function (a, b) { return rank(a) - rank(b) || a.name.localeCompare(b.name); });
@@ -100,9 +109,14 @@
         '<div><div class="bigname">' + esc(b.name) + '</div><div class="muted">' + esc(b.pub.title) + ", " + esc(b.pub.org) + "</div></div>" +
         "<p>Needs: " + esc(b.pub.need) + "</p>" +
         (k ? '<div class="card note"><p>Hidden priority: <b>' + label("priorities", k.priority) + "</b></p><p>Boss's rule: <b>" + esc(k.constraint.text) + "</b></p></div>" : "") +
-        mine.map(function (o) { return '<div class="row"><span class="num"><b>' + money(o.price) + "</b> sent</span>" + statusChip(o) + "</div>"; }).join("") +
-        (b.decided ? '<span class="chip grey">Has decided</span>' :
-          left > 0 ? '<button class="btn primary block" data-act="offer-open" data-id="' + b.id + '"' + (open ? "" : " disabled") + ">Make an offer</button>" : "") +
+        mine.map(function (o) { return '<div class="row"><span class="num"><b>' + money(o.price) + "</b>" + (o.pilot ? " + pilot" : "") + "</span>" + statusChip(o) + "</div>"; }).join("") +
+        (function () {
+          var pending = mine.filter(function (o) { return o.status === "pending"; })[0];
+          if (b.decided) return '<span class="chip grey">Has decided</span>';
+          if (pending) return '<button class="btn block" data-act="revise-open" data-id="' + pending.id + '"' + (open ? "" : " disabled") + ">Edit the term sheet</button>";
+          if (left > 0) return '<button class="btn primary block" data-act="offer-open" data-id="' + b.id + '"' + (open ? "" : " disabled") + ">" + (mine.length ? "New term sheet" : "Write a term sheet") + "</button>";
+          return "";
+        })() +
         "</div>";
     });
     if (!buyers.length) html += '<div class="card"><p>No buyers in your category yet.</p></div>';
@@ -111,7 +125,7 @@
   function sellerOffers(st) {
     var names = {};
     st.buyers.forEach(function (b) { names[b.id] = b; });
-    if (!st.offers.length) return '<div class="card"><p>You have not sent any offers yet.</p></div>';
+    if (!st.offers.length) return '<div class="card"><p><b>No term sheets yet.</b> Go and talk to a buyer first.</p></div>';
     return st.offers.slice().reverse().map(function (o) {
       var b = names[o.buyer_id] || { name: "Buyer", pub: { org: "" } };
       return '<div class="card stack"><div class="row"><div><div class="bigname">' + esc(b.name) + '</div><div class="muted">' + esc(b.pub.org) + '</div></div><div class="price num">' + money(o.price) + "</div></div>" +
@@ -130,14 +144,14 @@
       (k ? '<span class="chip conn">You know them · ' + label("relationships", k.type) + "</span>" : "") +
       '<div class="row"><div><div class="bigname">' + esc(o.seller.pub.org) + '</div><div class="muted">from ' + esc(o.seller.name) + '</div></div><div style="text-align:right"><div class="price num">' + money(o.price) + '</div><div class="muted num">' +
       (sav >= 0 ? sav + "% under incumbent" : -sav + "% over incumbent") + "</div></div></div>" +
-      "<p>" + esc(o.seller.pub.tagline) + "</p>" + offerTerms(o) +
+      "<p>" + esc(o.seller.pub.tagline) + "</p>" + offerTerms(o) + (o.revisions ? '<div><span class="chip plain">Edited ' + o.revisions + (o.revisions === 1 ? " time" : " times") + "</span></div>" : "") +
       '<p class="muted">Deploys in ' + o.seller.pub.deployWeeks + " weeks.</p>" +
       (k ? '<div class="card note"><p>You know the truth: this start-up <b>' + reliabilityText(k.reliability) + "</b>.</p></div>" : "") +
       (closed ? "<div>" + statusChip(o) + "</div>" :
         '<div class="stack"><div class="check ' + (f.priorityMet ? "ok" : "no") + '">' + (f.priorityMet ? "✓ Fits" : "✗ Does not fit") + " your priority (" + label("priorities", c.priority) + ")</div>" +
         '<div class="check ' + (f.constraintMet ? "ok" : "no") + '">' + (f.constraintMet ? "✓ Passes" : "✗ Breaks") + " your boss's rule</div>" +
         (f.overBudget ? '<div class="check no">✗ Over your budget: you cannot sign this</div>' : "") + "</div>" +
-        (canAct ? '<div class="row"><button class="btn block" data-act="reject-open" data-id="' + o.id + '">Reject</button><button class="btn good block" data-act="accept-open" data-id="' + o.id + '"' + (f.overBudget ? " disabled" : "") + ">Accept</button></div>" : "")) +
+        (canAct ? '<div class="row"><button class="btn block" data-act="reject-open" data-id="' + o.id + '">Reject</button><button class="btn good block" data-act="accept-open" data-id="' + o.id + '"' + (f.overBudget ? " disabled" : "") + ">Sign</button></div>" : "")) +
       "</div>";
   }
   function buyerMarket(st) {
@@ -147,11 +161,12 @@
     if (me.decision === "startup") html += '<div class="banner done">Deal signed. Wait for the market to close.</div>';
     if (me.decision === "incumbent") html += '<div class="banner done">You stayed with ' + esc(c.incumbent.name) + ".</div>";
     html += '<div class="card kv"><div><div class="label">Incumbent · ' + esc(c.incumbent.name) + '</div><div class="v num">' + money(c.incumbent.price) + '</div></div><div><div class="label">Your budget</div><div class="v num">' + money(c.budget) + "</div></div></div>";
+    if (c.desk && !me.decision) html += '<div class="card note row"><span>Your desk number, for sellers you want to hear from</span><span class="deskpill num" style="font-size:1.5em">' + esc(c.desk) + "</span></div>";
     var pending = st.offers.filter(function (o) { return o.status === "pending"; }).sort(function (a, b) {
       return (known[b.seller_id] ? 1 : 0) - (known[a.seller_id] ? 1 : 0) || b.created_at - a.created_at;
     });
     var closed = st.offers.filter(function (o) { return o.status !== "pending"; }).sort(function (a, b) { return b.created_at - a.created_at; });
-    if (!st.offers.length) html += '<div class="card"><p><b>No offers yet.</b> Sellers will come and find you. Offers appear here.</p></div>';
+    if (!st.offers.length) html += '<div class="card"><p><b>No term sheets yet.</b> Sellers will walk up and pitch you. What you agree out loud appears here for you to sign.</p></div>';
     html += pending.map(function (o) { return offerCard(st, o, false); }).join("");
     if (closed.length) html += '<div class="label" style="margin:18px 0 8px">Closed offers</div>' + closed.map(function (o) { return offerCard(st, o, true); }).join("");
     if (!me.decision && st.game.phase === "open") {
@@ -208,29 +223,33 @@
     var g = st.game, me = st.me;
     if (!me) {
       if (g.phase === "locked") return '<div class="hero"><h1>This game has finished.</h1><p class="muted">Watch the big screen for the results.</p></div>';
-      return '<div class="hero"><div class="label">' + esc(cfg.subtitle) + "</div><h1>" + esc(cfg.title) + '</h1><p class="muted">Enter your name to join. No account needed.</p></div>' +
+      return '<div class="hero-art"><img src="art/hero-s.jpg" alt=""></div><div class="hero"><div class="label">' + esc(cfg.subtitle) + "</div><h1>" + esc(cfg.title) + '</h1><p class="muted">Enter your name to join. No account needed.</p></div>' +
         '<div class="stack"><input class="field" id="name" maxlength="24" autocomplete="given-name" placeholder="Your first name" value="' + esc(store.getItem("b2bsim.name") || "") + '">' +
         '<button class="btn primary block" data-act="join"' + (S.busy ? " disabled" : "") + ">Join the game</button></div>";
     }
     if (!me.role) {
-      return '<div class="hero"><div class="label">You are in</div><h1>' + esc(me.name) + '</h1><p class="muted">' +
+      return '<div class="hero-art"><img src="art/hero-s.jpg" alt=""></div><div class="hero"><div class="label">You are in</div><h1>' + esc(me.name) + '</h1><p class="muted">' +
         (g.phase === "lobby" ? st.n_players + " joined so far. Keep this page open: your role appears when the host starts." : "Getting your role…") + "</p></div>";
     }
     if (g.phase === "lobby" || g.phase === "briefing") {
       return header(roleLine(me), me.card.org, g.phase === "briefing" ? "Market opens in" : "") +
-        '<div class="banner paused">Read your card. The market opens soon.</div>' + roleCard(me);
+        '<div class="banner paused">Read your card. Then stand up: the market opens soon.</div>' +
+        '<div class="tabs"><button class="btn' + (S.tab !== "badge" ? " on" : "") + '" data-act="tab" data-id="card">My card</button><button class="btn' + (S.tab === "badge" ? " on" : "") + '" data-act="tab" data-id="badge">My badge</button></div>' +
+        (S.tab === "badge" ? badge(me) : roleCard(me));
     }
     if (g.phase === "locked") return header(roleLine(me), me.card.org, "") + outcome(st);
 
     // market open or paused
     var tabs = me.role === "seller"
-      ? [["main", "Buyers"], ["offers", "My offers (" + st.offers.length + ")"], ["card", "My card"]]
-      : [["main", "Inbox (" + st.offers.filter(function (o) { return o.status === "pending"; }).length + ")"], ["card", "My card"]];
-    var body = S.tab === "card" ? roleCard(me) : me.role === "seller" ? (S.tab === "offers" ? sellerOffers(st) : sellerMarket(st)) : buyerMarket(st);
+      ? [["main", "Buyers"], ["offers", "Deals (" + st.offers.length + ")"], ["badge", "Badge"], ["card", "Card"]]
+      : [["main", "Inbox (" + st.offers.filter(function (o) { return o.status === "pending"; }).length + ")"], ["badge", "Badge"], ["card", "Card"]];
+    var tab = ["main", "offers", "badge", "card"].indexOf(S.tab) >= 0 ? S.tab : "main";
+    if (tab === "offers" && me.role !== "seller") tab = "main";
+    var body = tab === "card" ? roleCard(me) : tab === "badge" ? badge(me) : me.role === "seller" ? (tab === "offers" ? sellerOffers(st) : sellerMarket(st)) : buyerMarket(st);
     return header(roleLine(me), me.card.org, g.phase === "paused" ? "Paused" : "Time left") +
       (g.phase === "paused" ? '<div class="banner paused">The host paused the market.</div>' : "") +
       '<div class="tabs">' + tabs.map(function (t) {
-        return '<button class="btn' + (S.tab === t[0] ? " on" : "") + '" data-act="tab" data-id="' + t[0] + '">' + esc(t[1]) + "</button>";
+        return '<button class="btn' + (tab === t[0] ? " on" : "") + '" data-act="tab" data-id="' + t[0] + '">' + esc(t[1]) + "</button>";
       }).join("") + "</div>" + body;
   }
 
@@ -254,8 +273,11 @@
     if (sh.type === "offer") {
       var b = st.buyers.filter(function (x) { return x.id === sh.buyerId; })[0];
       var c = me.card, ready = c.assets.indexOf("pilot_ready") >= 0;
-      html = '<div class="label">Offer to</div><div class="bigname">' + esc(b.name) + '</div><div class="muted">' + esc(b.pub.org) + "</div>" +
-        '<div class="label" style="margin-top:16px">Price per year</div>' +
+      if (!b) { S.sheet = null; sheetEl.innerHTML = ""; return; }
+      html = '<div class="label">' + (sh.offerId ? "Edit the term sheet for" : "Term sheet for") + '</div><div class="bigname">' + esc(b.name) + '</div><div class="muted">' + esc(b.pub.org) + "</div>" +
+        (!sh.offerId && cfg.requireMeetingCode ? '<div class="label" style="margin-top:16px">Their desk number (ask them, face to face)</div>' +
+          '<input class="field deskinput num" id="deskInput" inputmode="numeric" maxlength="2" autocomplete="off" placeholder="--" value="' + esc(sh.desk || "") + '">' : "") +
+        '<div class="label" style="margin-top:16px">Agreed price per year</div>' +
         '<div class="stepper"><button class="btn" data-act="price" data-id="-5">−</button><div class="big num" id="priceOut">' + money(sh.price) + '</div><button class="btn" data-act="price" data-id="5">+</button></div>' +
         '<input class="slider" id="priceSlider" type="range" min="' + c.floor + '" max="' + c.list + '" step="1" value="' + sh.price + '">' +
         '<div class="row muted num"><span>Floor ' + money(c.floor) + "</span><span>List " + money(c.list) + "</span></div>" +
@@ -267,12 +289,15 @@
           return '<button class="option' + (on ? " on" : "") + '" data-act="proof" data-id="' + a + '"><span class="box">' + (on ? "✓" : "") + "</span><span><b>Show: " + label("proofs", a) + "</b></span></button>";
         }).join("") +
         (c.assets.length ? "" : '<p class="muted">You have no proof to show.</p>') + "</div>" +
-        '<div class="stack" style="margin-top:18px"><button class="btn primary block" data-act="offer-send"' + (S.busy ? " disabled" : "") + ">Send offer · uses 1 of your " + me.offers_left + " left</button>" +
-        '<button class="btn block" data-act="sheet-close">Cancel</button><p class="muted" style="text-align:center">A sent offer cannot be taken back.</p></div>';
+        '<div class="stack" style="margin-top:18px"><button class="btn primary block" data-act="offer-send"' + (S.busy ? " disabled" : "") + ">" +
+        (sh.offerId ? "Update the term sheet" : "Send for signature · uses 1 of your " + me.offers_left) + "</button>" +
+        '<button class="btn block" data-act="sheet-close">Cancel</button><p class="muted" style="text-align:center">' +
+        (sh.offerId ? "The buyer sees the new terms at once." : "You can still edit the terms until the buyer signs or rejects.") + "</p></div>";
     } else if (sh.type === "accept") {
       var o = st.offers.filter(function (x) { return x.id === sh.offerId; })[0];
       if (!o) { S.sheet = null; sheetEl.innerHTML = ""; return; }
-      html = '<div class="label">Sign this deal?</div><div class="bigname">' + esc(o.seller.pub.org) + " · " + money(o.price) + "</div>" +
+      if (o.price !== sh.price) { sh.price = o.price; toast("The seller changed the terms. Check them."); }
+      html = '<div class="label">Sign this deal?</div><div class="bigname">' + esc(o.seller.pub.org) + " · " + money(o.price) + (o.pilot ? " + pilot" : "") + "</div>" +
         '<div class="card warn" style="margin-top:12px"><p><b>This is your one deal.</b> ' + esc(S.cards.riskRule) + "</p>" +
         (o.pilot ? "<p style=\"margin-top:6px\">This offer includes a pilot: if they fail, you keep " + cfg.points.failedWithPilot + " points.</p>" : "") + "</div>" +
         '<div class="stack" style="margin-top:16px"><button class="btn good block" data-act="accept"' + (S.busy ? " disabled" : "") + ">Sign the deal</button>" +
@@ -300,11 +325,15 @@
   }
 
   // Run a player action, then refresh.
-  function act(promiseFn, after) {
+  function act(promiseFn, after, keepOnError) {
     if (S.busy) return;
     S.busy = true; render(); renderSheet();
-    promiseFn().then(function (r) { if (after) after(r); }, function (e) { toast(B2B.errorText(e)); })
-      .then(function () { S.busy = false; closeSheet(); render(true); refresh(); });
+    promiseFn().then(function (r) { if (after) after(r); return true; }, function (e) { toast(B2B.errorText(e)); return false; })
+      .then(function (ok) {
+        S.busy = false;
+        if (ok || !keepOnError) closeSheet(); else renderSheet();
+        render(true); refresh();
+      });
   }
 
   // ---------- events ----------
@@ -326,7 +355,10 @@
     } else if (a === "sheet-close") {
       closeSheet();
     } else if (a === "offer-open") {
-      openSheet({ type: "offer", buyerId: id, price: st.me.card.list, pilot: false, proof: st.me.card.assets.slice() });
+      openSheet({ type: "offer", buyerId: id, desk: "", price: st.me.card.list, pilot: false, proof: st.me.card.assets.slice() });
+    } else if (a === "revise-open") {
+      var cur = st.offers.filter(function (x) { return x.id === id; })[0];
+      if (cur) openSheet({ type: "offer", offerId: cur.id, buyerId: cur.buyer_id, price: cur.price, pilot: cur.pilot, proof: (cur.proof || []).slice() });
     } else if (a === "price") {
       sh.price = E.clamp(sh.price + Number(id), st.me.card.floor, st.me.card.list); renderSheet();
     } else if (a === "pilot") {
@@ -336,11 +368,17 @@
       if (i >= 0) sh.proof.splice(i, 1); else sh.proof.push(id);
       renderSheet();
     } else if (a === "offer-send") {
-      act(function () { return api.offer(S.code, S.token, sh.buyerId, sh.price, sh.pilot, sh.proof); }, function () { toast("Offer sent."); });
+      if (sh.offerId) {
+        act(function () { return api.revise(S.code, S.token, sh.offerId, sh.price, sh.pilot, sh.proof); }, function () { toast("Term sheet updated."); }, true);
+      } else {
+        if (cfg.requireMeetingCode && !/^\d{2}$/.test(sh.desk || "")) return toast("Ask the buyer for their 2-digit desk number.");
+        act(function () { return api.offer(S.code, S.token, sh.buyerId, sh.price, sh.pilot, sh.proof, sh.desk); }, function () { toast("Sent. Ask them to sign on their phone."); }, true);
+      }
     } else if (a === "accept-open") {
-      openSheet({ type: "accept", offerId: id });
+      var seen = st.offers.filter(function (x) { return x.id === id; })[0];
+      if (seen) openSheet({ type: "accept", offerId: id, price: seen.price });
     } else if (a === "accept") {
-      act(function () { return api.decide(S.code, S.token, sh.offerId, true, null); }, function () { toast("Deal signed."); });
+      act(function () { return api.decide(S.code, S.token, sh.offerId, true, null, sh.price); }, function () { toast("Deal signed."); });
     } else if (a === "reject-open") {
       openSheet({ type: "reject", offerId: id });
     } else if (a === "reject") {
@@ -354,6 +392,7 @@
     }
   });
   document.addEventListener("input", function (ev) {
+    if (ev.target.id === "deskInput" && S.sheet) { S.sheet.desk = ev.target.value.replace(/\D/g, "").slice(0, 2); return; }
     if (ev.target.id === "priceSlider" && S.sheet) {
       S.sheet.price = Number(ev.target.value);
       document.getElementById("priceOut").textContent = money(S.sheet.price);
@@ -379,6 +418,7 @@
         S.st = st;
         // A sheet is only valid while the market is open.
         if (S.sheet && (!st || !st.me || st.game.phase !== "open")) closeSheet();
+        if (S.sheet && S.sheet.type === "accept") renderSheet();
         render();
       });
     }, function () {

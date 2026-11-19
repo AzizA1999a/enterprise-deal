@@ -39,13 +39,32 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   assert.strictEqual(pubDuring.full, null, "no full data before the lock");
   assert.ok(!JSON.stringify(pubDuring).includes("reliability"), "projector data hides reliability during play");
 
-  let polls = 0, pollMs = 0, paused = false;
+  let polls = 0, pollMs = 0, paused = false, faceTested = false;
   for (let i = 0; i < 600; i++) {
     const a = Date.now();
     hs = await api.hostState(code, pin);
     pollMs += Date.now() - a; polls++;
     await B2B.driver.tick(ctx, hs);
     await B2B.bots.tick(ctx, hs);
+    if (!faceTested && hs.game.phase === "open") {                            // desk number, edit, sign-what-you-saw
+      faceTested = true;
+      const seller = hs.players.find(p => p.role === "seller" && p.offers_left > 0);
+      const buyer = hs.players.find(p => p.role === "buyer" && p.category === seller.category && !p.decision);
+      assert.ok(/^\d{2}$/.test(buyer.card.desk), "buyer has a 2-digit desk number");
+      const sellerView = await api.state(code, seller.token);
+      assert.ok(!JSON.stringify(sellerView.buyers).includes('"desk"'), "sellers cannot read desk numbers");
+      const wrong = buyer.card.desk === "11" ? "12" : "11";
+      await assert.rejects(api.offer(code, seller.token, buyer.id, seller.card.list, false, [], wrong), e => e.code === "bad_desk");
+      const made = await api.offer(code, seller.token, buyer.id, seller.card.list, false, [], buyer.card.desk);
+      await assert.rejects(api.offer(code, seller.token, buyer.id, seller.card.list, false, [], buyer.card.desk), e => e.code === "already_pitched");
+      await api.revise(code, seller.token, made.id, seller.card.floor, true, []);
+      const buyerView = await api.state(code, buyer.token);
+      const seen = buyerView.offers.find(o => o.id === made.id);
+      assert.strictEqual(seen.price, seller.card.floor); assert.strictEqual(seen.revisions, 1); assert.strictEqual(seen.pilot, true);
+      await assert.rejects(api.decide(code, buyer.token, made.id, true, null, seller.card.list), e => e.code === "offer_changed");
+      console.log("face-to-face rules OK (desk number, edit, sign-what-you-saw)");
+      continue;
+    }
     if (!paused && hs.game.phase === "open" && hs.offers.length > 5) {       // pause, extend, resume
       paused = true;
       await api.host(code, pin, "pause");
