@@ -12,6 +12,7 @@ actually drove the deals.
 | Player | every student, on a phone (the QR code points here) | `index.html` |
 | Host panel | your laptop: roster, data export, reset | `host.html` |
 | Projector only | the game screens without slides, for rehearsals | `screen.html` |
+| Speaking script | the five speakers: what to say and press, slide by slide | `script.html` |
 
 One window must stay open for the whole game, because it runs the automatic steps (late joiners, opening
 the market, locking at zero, resolving deliveries): either the presentation or the host panel. If both
