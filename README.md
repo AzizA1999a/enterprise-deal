@@ -74,6 +74,13 @@ In the host panel, **Add simulated players** fills the game with bots that join,
 answer the exit question. You can join from your own phone at the same time. Any result that includes
 bots is labelled "Simulated run" on the projector.
 
+**Test speed.** To get through a rehearsal quickly, choose 2×, 4×, 8× or 16× under Demo mode in the host panel
+(or press **Test speed** in the slide controls after adding simulated players). The briefing and the market
+get that much shorter (at 8× the 10-minute market lasts 1:15), and the simulated players and the account
+managers act that much faster. The clock and the ticker show real seconds. The speed is remembered per game
+code, in this browser only, and it is ignored unless the game has simulated players in it, so a real class
+always runs at normal speed.
+
 ## If the Wi-Fi fails
 
 Double-click **Start Offline.command**. The whole game then runs inside the laptop's browser with

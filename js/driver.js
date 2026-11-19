@@ -3,7 +3,9 @@
            briefing, lock at zero, resolve deliveries).
    rivals: the incumbents' account managers. Always computer-played, in a real
            class as well as in demo mode: they counter every start-up term sheet.
-   bots:   simulated players for demo mode. They use the same calls as phones. */
+   bots:   simulated players for demo mode. They use the same calls as phones.
+   speed:  a test speed (2x to 16x) for rehearsing alone. It only ever applies to a
+           game that has simulated players in it; a real class runs at normal speed. */
 (function (root) {
   "use strict";
   var B2B = (root.B2B = root.B2B || {});
@@ -29,6 +31,24 @@
     }
   };
 
+  // Test speed. Chosen per game in this browser, and ignored unless the game has simulated players.
+  var speed = {
+    options: [1, 2, 4, 8, 16],
+    key: function (code) { return "b2bsim.speed." + String(code || "").toUpperCase(); },
+    chosen: function (code) {
+      var n = 1;
+      try { n = Number(B2B.store.getItem(speed.key(code))); } catch (e) { /* no storage */ }
+      return speed.options.indexOf(n) >= 0 ? n : 1;
+    },
+    set: function (code, n) { try { B2B.store.setItem(speed.key(code), String(n)); } catch (e) { /* no storage */ } },
+    of: function (code, players) {
+      return (players || []).some(function (p) { return p.is_bot; }) ? speed.chosen(code) : 1;
+    },
+    ms: function (code, players, ms) { return Math.max(1, Math.round(ms / speed.of(code, players))); },
+    // How often the host page should look at the game: faster at a test speed, so nothing is skipped.
+    poll: function (code, players, ms) { return Math.max(250, Math.round(ms / speed.of(code, players))); }
+  };
+
   // One round of host duties: read the game, run automatic steps, let bots act. Returns the state.
   function hostRound(ctx, botsOn) {
     return ctx.api.hostState(ctx.code, ctx.pin).then(function (hs) {
@@ -50,7 +70,7 @@
     start: function (ctx, hs) {
       var patch = E.assign(hs.players.map(function (p) { return { id: p.id, name: p.name }; }), ctx.cards, ctx.cfg);
       return ctx.api.hostApply(ctx.code, ctx.pin, patch).then(function () {
-        return ctx.api.host(ctx.code, ctx.pin, "start", { briefing_ms: ctx.cfg.briefingSeconds * 1000 });
+        return ctx.api.host(ctx.code, ctx.pin, "start", { briefing_ms: speed.ms(ctx.code, hs.players, ctx.cfg.briefingSeconds * 1000) });
       });
     },
 
@@ -63,7 +83,7 @@
       if (g.phase !== "lobby" && g.phase !== "locked" && newcomers.length) {
         step = function () { return ctx.api.hostApply(ctx.code, ctx.pin, E.assignLate(newcomers, assigned, ctx.cards, ctx.cfg)); };
       } else if (g.phase === "briefing" && hs.now >= g.briefing_ends_at) {
-        step = function () { return ctx.api.host(ctx.code, ctx.pin, "open", { market_ms: ctx.cfg.marketSeconds * 1000 }); };
+        step = function () { return ctx.api.host(ctx.code, ctx.pin, "open", { market_ms: speed.ms(ctx.code, hs.players, ctx.cfg.marketSeconds * 1000) }); };
       } else if (g.phase === "open" && hs.now >= g.ends_at) {
         step = function () { return ctx.api.host(ctx.code, ctx.pin, "lock"); };
       } else if (g.phase === "locked" && E.needsResolve(assigned, hs.offers)) {
@@ -97,7 +117,7 @@
         var c = E.rivalCounter(b, mine, pubs, ctx.cfg, { early: frac >= pl.early });
         if (!c) { pl.due = null; return; }
         // An account manager needs a moment to hear about the start-up and get a discount approved.
-        if (pl.due == null) pl.due = hs.now + (c.kind === "early" ? 0 : (R.reactSeconds[0] + r() * (R.reactSeconds[1] - R.reactSeconds[0])) * 1000);
+        if (pl.due == null) pl.due = hs.now + (c.kind === "early" ? 0 : (R.reactSeconds[0] + r() * (R.reactSeconds[1] - R.reactSeconds[0])) * 1000 / speed.of(ctx.code, hs.players));
         if (hs.now < pl.due) return;
         pl.due = null;
         c.at = hs.now; c.t = t;
@@ -263,7 +283,7 @@
 
     // Call on every host refresh. Bots act through the normal player calls.
     tick: function (ctx, hs) {
-      var g = hs.game, jobs = [];
+      var g = hs.game, jobs = [], fast = speed.of(ctx.code, hs.players);
       var live = hs.players.filter(function (p) { return p.is_bot && p.role && p.token; });
       if (g.phase === "open" && g.total_ms) {
         var frac = (g.total_ms - Math.max(0, g.ends_at - hs.now)) / g.total_ms;
@@ -274,11 +294,11 @@
               pl.sent++;
               job = bots.sellerOffer(ctx, hs, p);
             } else if (hs.now >= pl.nextAnswer) {
-              pl.nextAnswer = hs.now + 4000 + bots.rnd() * 6000;
+              pl.nextAnswer = hs.now + (4000 + bots.rnd() * 6000) / fast;
               job = bots.sellerAnswer(ctx, hs, p, pl);
             }
           } else if (!p.decision && frac >= pl.wake && hs.now >= pl.nextLook) {
-            pl.nextLook = hs.now + 2500 + bots.rnd() * 4000;
+            pl.nextLook = hs.now + (2500 + bots.rnd() * 4000) / fast;
             job = bots.buyerLook(ctx, hs, p, pl, frac);
           }
           if (job) jobs.push(job.catch(function () { /* lost a race with another player: ignore */ }));
@@ -288,7 +308,7 @@
           var pl = bots.plan(p);
           if (p.exit_answer || p.points == null) return;
           if (!pl.lockedSeen) { pl.lockedSeen = hs.now; return; }
-          if (hs.now - pl.lockedSeen < pl.exitDelay) return;
+          if (hs.now - pl.lockedSeen < pl.exitDelay / fast) return;
           jobs.push(ctx.api.exit(ctx.code, p.token, bots.exitAnswer(hs, p, pl)).catch(function () {}));
         });
       } else if (g.phase === "lobby") {
@@ -302,5 +322,6 @@
   B2B.rivals = rivals;
   B2B.bots = bots;
   B2B.leader = leader;
+  B2B.speed = speed;
   B2B.hostRound = hostRound;
 })(typeof window !== "undefined" ? window : globalThis);

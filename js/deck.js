@@ -122,12 +122,14 @@
     var html = "";
     if (!D.code || D.pub === null) html = b("create", "Create game", true);
     else if (!has) html = "<span>Game " + esc(D.code) + " · controls are on the host panel</span>";
-    else if (p === "lobby") html = b("start", "Start: assign roles", true) + b("bots", "+24 simulated players");
+    else if (p === "lobby") html = b("start", "Start: assign roles", true) + b("bots", "+24 simulated players") +
+      (D.pub.players.some(function (x) { return x.is_bot; }) ? b("speed", "Test speed " + B2B.speed.chosen(D.code) + "×") : "");
     else if (p === "briefing") html = b("open", "Open market now", true);
     else if (p === "open") html = b("pause", "Pause") + b("extend", "+1 min") + b("lock", "Lock market");
     else if (p === "paused") html = b("resume", "Resume", true) + b("extend", "+1 min") + b("lock", "Lock market");
     else if (p === "locked") html = "<span>Market closed · next slide for the results</span>";
-    return html + (D.msg ? " <span>" + esc(D.msg) + "</span>" : "");
+    var fast = has && D.pub && p !== "lobby" ? B2B.speed.of(D.code, D.pub.players) : 1;
+    return html + (fast > 1 ? " <span>Test speed " + fast + "×</span>" : "") + (D.msg ? " <span>" + esc(D.msg) + "</span>" : "");
   }
 
   function renderLive() {
@@ -140,7 +142,7 @@
       setHtml(el, name + key, D.st && V.panels[name] ? V.panels[name](D.st) : empty("Our room's result appears here after the game."));
     });
     var pr = s.querySelector(".presenter");
-    if (pr) setHtml(pr, key + pin() + D.msg, presenterHtml());
+    if (pr) setHtml(pr, key + pin() + D.msg + B2B.speed.chosen(D.code), presenterHtml());
     var bots = pub ? pub.players.filter(function (p) { return p.is_bot; }).length : 0;
     var chip = s.querySelector(".simchip");
     if (chip) setHtml(chip, "sim" + bots, bots ? '<span class="chip sim" style="text-transform:none;letter-spacing:0">Simulated run · ' + bots + " simulated players</span>" : "");
@@ -166,14 +168,18 @@
       }, function (e) { D.msg = B2B.errorText(e); renderLive(); });
     } else if (a === "start") {
       run(api.hostState(c.code, c.pin).then(function (hs) { return B2B.driver.start(c, hs); }));
+    } else if (a === "speed") {
+      var opts = B2B.speed.options;
+      B2B.speed.set(c.code, opts[(opts.indexOf(B2B.speed.chosen(c.code)) + 1) % opts.length]);
+      renderLive();
     } else if (a === "bots") {
       run(B2B.bots.add(c, 24, (D.pub ? D.pub.players : []).map(function (p) { return p.name; })));
     } else if (a === "open") {
-      run(api.host(c.code, c.pin, "open", { market_ms: cfg.marketSeconds * 1000 }));
+      run(api.host(c.code, c.pin, "open", { market_ms: B2B.speed.ms(c.code, D.pub && D.pub.players, cfg.marketSeconds * 1000) }));
     } else if (a === "pause" || a === "resume") {
       run(api.host(c.code, c.pin, a));
     } else if (a === "extend") {
-      run(api.host(c.code, c.pin, "extend", { ms: cfg.extendSeconds * 1000 }));
+      run(api.host(c.code, c.pin, "extend", { ms: B2B.speed.ms(c.code, D.pub && D.pub.players, cfg.extendSeconds * 1000) }));
     } else if (a === "lock") {
       if (window.confirm("Lock the market now?")) run(api.host(c.code, c.pin, "lock"));
     }
@@ -229,7 +235,7 @@
       });
     }, function () {
       var p = D.pub && D.pub.game && D.pub.game.phase;
-      return B2B.mode === "local" ? 600 : p === "locked" ? 2500 : 1200;
+      return B2B.speed.poll(D.code, pin() && D.pub && D.pub.players, B2B.mode === "local" ? 600 : p === "locked" ? 2500 : 1200);
     });
   });
 })();

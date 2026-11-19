@@ -46,6 +46,8 @@
       '<div class="grid"><div class="card stack" id="status"></div><div><div class="card stack"><h2>Demo mode</h2>' +
       '<div class="inline"><input class="field" id="botn" type="number" min="1" max="60" value="24" style="width:90px"><button class="btn" data-act="addbots">Add simulated players</button></div>' +
       '<label class="inline"><input type="checkbox" id="autobots" checked> Simulated players act on their own</label>' +
+      '<label class="inline">Test speed <select class="field" id="speed" style="width:auto">' + B2B.speed.options.map(function (n) { return '<option value="' + n + '"' + (n === B2B.speed.chosen(H.sess.code) ? " selected" : "") + ">" + (n === 1 ? "1× (as in class)" : n + "×") + "</option>"; }).join("") + '</select></label>' +
+      '<p class="muted" id="speednote"></p>' +
       '<p class="muted">Simulated players join, negotiate and answer like a class would. Results that include them are labelled "Simulated run" on the projector.</p></div>' +
       '<div class="card stack"><h2>Data</h2><div class="inline"><button class="btn" data-act="export">Download CSV files</button><button class="btn danger" data-act="reset">Reset game</button></div>' +
       '<p class="muted">Three files: every offer, every player, and the event log. Reset removes all players and offers but keeps the game code.</p></div></div></div>' +
@@ -82,6 +84,7 @@
       '<div class="chips"><span class="chip plain num">' + P.length + ' players</span><span class="chip plain num">' + sellers + " sellers · " + buyers + ' buyers</span><span class="chip plain num">' + hs.offers.length +
       ' offers</span><span class="chip plain num">' + deals + ' deals</span><span class="chip plain num">' + stayed + ' stayed with incumbent</span>' +
       (cfg.rivals && cfg.rivals.on ? '<span class="chip plain num">' + counterOffers + " incumbent counter-offers</span>" : "") +
+      (B2B.speed.of(H.sess.code, P) > 1 ? '<span class="chip sim">Test speed ' + B2B.speed.of(H.sess.code, P) + "×</span>" : "") +
       (g.phase === "locked" ? '<span class="chip plain num">' + answered + " of " + (sellers + buyers) + " exit answers</span>" : "") + "</div>" +
       '<p class="muted">' + hint + '</p><div class="controls">' + controls + "</div>" +
       (H.msg ? '<div class="card warn">' + esc(H.msg) + "</div>" : "");
@@ -116,6 +119,17 @@
     H.key = key;
     document.getElementById("status").innerHTML = statusView(hs);
     document.getElementById("roster").innerHTML = rosterView(hs);
+    speedNote();
+  }
+
+  // Says what the chosen test speed does, and whether it is in force.
+  function speedNote() {
+    var el = document.getElementById("speednote");
+    if (!el || !H.sess) return;
+    var n = B2B.speed.chosen(H.sess.code), on = H.hs && B2B.speed.of(H.sess.code, H.hs.players) > 1;
+    el.textContent = n === 1 ? "For rehearsing alone: a faster briefing and market, with the simulated players and account managers keeping pace."
+      : "At " + n + "×: briefing " + ui.tclock(cfg.briefingSeconds / n) + ", market " + ui.tclock(cfg.marketSeconds / n) + ". " +
+        (on ? "In force for this game." : "Not in force yet: it only applies once simulated players are in the game, so a real class always runs at normal speed.");
   }
 
   function run(promise) {
@@ -124,6 +138,13 @@
   }
 
   // ---------- events ----------
+  document.addEventListener("change", function (ev) {
+    if (ev.target.id !== "speed" || !H.sess) return;
+    B2B.speed.set(H.sess.code, Number(ev.target.value));
+    H.key = "";
+    render();
+    refresh();
+  });
   document.addEventListener("click", function (ev) {
     var el = ev.target.closest("[data-act]");
     if (!el || el.disabled) return;
@@ -149,11 +170,11 @@
       if (H.problems.length) { H.msg = "Fix data/cards.json first."; H.key = ""; return render(); }
       run(B2B.driver.start(ctx(), H.hs));
     } else if (a === "open") {
-      run(api.host(H.sess.code, H.sess.pin, "open", { market_ms: cfg.marketSeconds * 1000 }));
+      run(api.host(H.sess.code, H.sess.pin, "open", { market_ms: B2B.speed.ms(H.sess.code, H.hs.players, cfg.marketSeconds * 1000) }));
     } else if (a === "pause" || a === "resume") {
       run(api.host(H.sess.code, H.sess.pin, a));
     } else if (a === "extend") {
-      run(api.host(H.sess.code, H.sess.pin, "extend", { ms: cfg.extendSeconds * 1000 }));
+      run(api.host(H.sess.code, H.sess.pin, "extend", { ms: B2B.speed.ms(H.sess.code, H.hs.players, cfg.extendSeconds * 1000) }));
     } else if (a === "lock") {
       if (window.confirm("Lock the market now? No more offers or decisions after this.")) run(api.host(H.sess.code, H.sess.pin, "lock"));
     } else if (a === "view") {
@@ -193,6 +214,6 @@
       }, function (e) {
         if (e.code === "no_game" || e.code === "bad_pin") { H.msg = "That game could not be opened: " + B2B.errorText(e); saveSess(null); render(); }
       });
-    }, function () { return B2B.mode === "local" ? 500 : 1000; });
+    }, function () { return B2B.speed.poll(H.sess && H.sess.code, H.hs && H.hs.players, B2B.mode === "local" ? 500 : 1000); });
   }, function () { root.innerHTML = '<div class="card warn">Could not load data/cards.json.</div>'; });
 })();
