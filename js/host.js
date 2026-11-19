@@ -90,7 +90,9 @@
   function rosterView(hs) {
     if (!hs.players.length) return "<h2>Players</h2><p class=\"muted\">Nobody has joined yet.</p>";
     var rows = hs.players.slice().sort(function (a, b) { return (a.role || "z").localeCompare(b.role || "z") || (a.category || "").localeCompare(b.category || "") || a.name.localeCompare(b.name); });
-    return "<h2>Players</h2><table><tr><th>Name</th><th>Role</th><th>Organisation</th><th>Category</th><th>Knows</th><th>Offers</th><th>Result</th><th>Exit</th></tr>" +
+    var desks = rows.some(function (p) { return p.card && p.card.desk; });
+    return "<h2>Players</h2>" + (desks ? '<p class="muted">Desk numbers are each buyer\'s secret: a seller has to ask for it face to face. Keep this panel off the projector.</p>' : "") +
+      "<table><tr><th>Name</th><th>Role</th><th>Desk</th><th>Organisation</th><th>Category</th><th>Knows</th><th>Offers</th><th>Result</th><th>Exit</th></tr>" +
       rows.map(function (p) {
         var sent = hs.offers.filter(function (o) { return o.seller_id === p.id; });
         var got = hs.offers.filter(function (o) { return o.buyer_id === p.id; });
@@ -98,7 +100,7 @@
         var result = !p.role ? "" : p.role === "seller" ? (wins ? wins + " won" : "") :
           p.decision === "startup" ? "Signed a start-up" : p.decision === "incumbent" ? "Stayed" + (function () { var c = B2B.engine.standing(p.card, p.stay_level); return c ? " (took " + c.pct + "% off)" : ""; })() :
           p.decision === "incumbent_default" ? "Stayed (no decision)" : B2B.engine.counters(p.card).length ? B2B.engine.counters(p.card).length + " counter-offer(s) on the table" : "";
-        return "<tr><td>" + esc(p.name) + (p.is_bot ? ' <span class="chip grey">sim</span>' : "") + "</td><td>" + esc(p.role || "waiting") + "</td><td>" + esc(p.card ? p.card.org : "") + "</td><td>" + esc(p.card ? p.card.categoryName : "") +
+        return "<tr><td>" + esc(p.name) + (p.is_bot ? ' <span class="chip grey">sim</span>' : "") + "</td><td>" + esc(p.role || "waiting") + "</td><td>" + (p.card && p.card.desk ? '<span class="deskpill num">' + esc(p.card.desk) + "</span>" : "") + "</td><td>" + esc(p.card ? p.card.org : "") + "</td><td>" + esc(p.card ? p.card.categoryName : "") +
           "</td><td>" + esc(p.card ? p.card.connections.map(function (c) { return c.name; }).join(", ") : "") + '</td><td class="num">' + (p.role === "seller" ? sent.length + " sent" : p.role === "buyer" ? got.length + " received" : "") +
           "</td><td>" + result + (p.points != null ? ' · <span class="num">' + p.points + " pts</span>" : "") + "</td><td>" + esc(p.exit_answer || "") + "</td></tr>";
       }).join("") + "</table>";
