@@ -18,6 +18,13 @@ One window must stay open for the whole game, because it runs the automatic step
 the market, locking at zero, resolving deliveries): either the presentation or the host panel. If both
 are open in the same browser, only one of them does that work.
 
+## How the slides follow the assignment brief
+
+Hook (the game) and a one-slide roadmap, then the six required sections in order: 1 what it is and why
+now, 2 how and why it works, 3 who it is best for, 4 where it falls short, 5 audience engagement (the
+room's results and a table-group task), 6 where it is heading and a sequenced playbook. References are
+in APA format on the last slides. The wording is a draft for the team to rewrite in its own words.
+
 ## Running the presentation
 
 1. Open `host.html`, press **Create game**, then **Open the presentation**. Move that window to the
@@ -60,7 +67,7 @@ panel's first screen.
 | `data/benchmarks.json` | The "Real world" line under each dashboard metric. Empty until you fill it in. |
 | `css/theme.css` | The colour palette and font. |
 | `js/config.js` | Team names, timings, seller/buyer split, term sheets per seller, points, Supabase connection. |
-| `js/facts.js` | The research figures and sources shown on the slides. Never add a number without its source. |
+| `js/facts.js` | The research figures, cases, playbook and APA reference list shown on the slides. Never add a number without its source. |
 | `deck.html` | The slides themselves. |
 | `art/` | The illustrations (made with Higgsfield in one print style). |
 

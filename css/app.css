@@ -290,3 +290,53 @@ html.deck { font-size: 20.8px; }
 
 /* On the slides the research sits beside the room's data, so empty benchmark lines are hidden. */
 .deck .bench:not(.filled) { display: none; }
+
+/* ---------- slides: roadmap, chain, grids, tables (six-section deck) ---------- */
+.d-road { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: 1fr 1fr; gap: 1.1rem; }
+.d-road > div { background: var(--surface); border: 0.14rem solid var(--ink); border-radius: 1rem; padding: 1.1rem 1.3rem; box-shadow: 0.3rem 0.3rem 0 var(--ink); display: flex; flex-direction: column; gap: 0.5rem; }
+.d-road i { font-style: normal; font-family: var(--display); font-weight: 800; font-size: 1.5rem; background: var(--accent); color: var(--accent-ink); width: 2.6rem; height: 2.6rem; border-radius: 50%; display: grid; place-items: center; box-shadow: 0.16rem 0.16rem 0 var(--ink); }
+.d-road b { font-family: var(--display); font-size: 1.75rem; font-weight: 800; line-height: 1.05; }
+.d-road span { font-size: 1.1rem; color: var(--muted); font-weight: 500; }
+.d-grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.2rem; align-items: start; }
+.d-grid3 .d-fact .n { font-size: 3.6rem; }
+.d-grid3.tall { flex: 1; min-height: 0; align-items: stretch; }
+.d-grid3.tall .d-fact { display: flex; flex-direction: column; padding: 1.4rem 1.5rem; }
+.d-grid3.tall .d-fact .n { font-size: 5.6rem; }
+.d-grid3.tall .d-fact .t { font-size: 1.55rem; line-height: 1.25; margin-top: 0.9rem; flex: 1; }
+.d-grid3.tall .d-fact .d-src { font-size: 0.8rem; }
+.d-grid3.tall .d-ex { padding: 1.4rem 1.5rem; }
+.d-grid3.tall .d-ex .nm { font-size: 2.3rem; }
+.d-grid3.tall .d-ex .how { font-size: 1.45rem; }
+.d-grid3.tall .d-ex .way { font-size: 1.2rem; }
+.d-take { margin-top: 1.2rem; font-family: var(--display); font-weight: 800; font-size: 1.9rem; line-height: 1.15; }
+.d-chain { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2.2rem; }
+.d-link { position: relative; background: var(--surface); border: 0.14rem solid var(--ink); border-radius: 1rem; padding: 1rem 1.1rem; box-shadow: 0.3rem 0.3rem 0 var(--ink); display: flex; flex-direction: column; gap: 0.5rem; }
+.d-link:not(:last-child)::after { content: ""; position: absolute; right: -1.75rem; top: 50%; width: 1.1rem; height: 1.1rem; border-top: 0.24rem solid var(--accent); border-right: 0.24rem solid var(--accent); transform: translateY(-50%) rotate(45deg); }
+.d-link .k { font-family: var(--display); font-size: 1.5rem; font-weight: 800; line-height: 1.08; }
+.d-link .s { font-size: 1rem; font-weight: 600; color: var(--accent-text); }
+.d-link .d-src { margin-top: auto; }
+.d-link.last { background: var(--bad-soft); border-color: var(--bad); box-shadow: 0.3rem 0.3rem 0 var(--bad); }
+.d-break { margin-top: 1.6rem; background: var(--brand); color: var(--brand-ink); border-radius: 1rem; padding: 1.1rem 1.4rem; box-shadow: 0.3rem 0.3rem 0 var(--accent); }
+.d-breakrow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.8rem; margin-top: 0.7rem; }
+.d-breakrow span { font-family: var(--display); font-weight: 800; font-size: 1.3rem; background: rgba(255, 246, 230, 0.12); border: 0.1rem solid rgba(255, 246, 230, 0.5); border-radius: 0.7rem; padding: 0.5rem 0.8rem; }
+.d-fit { width: 100%; border-collapse: separate; border-spacing: 0 0.7rem; }
+.d-fit th { text-align: left; font-size: 0.8rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); padding: 0 1rem; }
+.d-fit td { background: var(--surface); border-top: 0.14rem solid var(--ink); border-bottom: 0.14rem solid var(--ink); padding: 0.75rem 1rem; vertical-align: top; font-size: 1.12rem; font-weight: 500; line-height: 1.25; }
+.d-fit td:first-child { border-left: 0.14rem solid var(--ink); border-radius: 0.9rem 0 0 0.9rem; width: 30%; }
+.d-fit td:last-child { border-right: 0.14rem solid var(--ink); border-radius: 0 0.9rem 0.9rem 0; }
+.d-fit .q { font-family: var(--display); font-size: 1.35rem; font-weight: 800; line-height: 1.1; }
+.d-fit .yes b { color: var(--good); }
+.d-fit .no b { color: var(--bad); }
+.d-ex { background: var(--surface); border: 0.14rem solid var(--ink); border-radius: 1rem; padding: 1.1rem 1.3rem; box-shadow: 0.3rem 0.3rem 0 var(--ink); display: flex; flex-direction: column; gap: 0.6rem; }
+.d-ex .nm { font-family: var(--display); font-size: 1.9rem; font-weight: 800; line-height: 1.05; }
+.d-ex .yr { align-self: flex-start; background: var(--brand); color: var(--brand-ink); border-radius: 999px; padding: 0.1rem 0.8rem; font-size: 0.85rem; font-weight: 700; }
+.d-ex .how { font-size: 1.15rem; font-weight: 500; line-height: 1.3; }
+.d-ex .way { background: var(--accent-soft); color: var(--accent-text); border-radius: 0.6rem; padding: 0.4rem 0.7rem; font-weight: 700; font-size: 1.02rem; }
+.d-play { display: grid; gap: 0.65rem; }
+.d-play > div { display: grid; grid-template-columns: 2.6rem 1.15fr 1fr; gap: 1rem; align-items: center; background: var(--surface); border: 0.14rem solid var(--ink); border-radius: 0.9rem; padding: 0.55rem 1rem; }
+.d-play i { font-style: normal; font-family: var(--display); font-weight: 800; font-size: 1.35rem; background: var(--accent); color: var(--accent-ink); width: 2.4rem; height: 2.4rem; border-radius: 50%; display: grid; place-items: center; }
+.d-play b { font-size: 1.25rem; font-weight: 700; line-height: 1.2; }
+.d-play span { font-size: 1rem; color: var(--muted); font-weight: 500; line-height: 1.25; }
+.d-play span em { font-style: normal; font-weight: 800; color: var(--bad); }
+.d-sources { list-style: none; padding: 0; margin: 0; }
+.d-sources li { padding-left: 1.6rem; text-indent: -1.6rem; }

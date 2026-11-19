@@ -11,11 +11,12 @@
 <body>
 <div id="deck">
 
+  <!-- ============ HOOK ============ -->
   <!-- 1 TITLE -->
   <section class="slide" data-bare>
     <div class="d-hero"><img src="art/hero.jpg" alt=""></div>
     <div class="d-hero-tx">
-      <div class="d-kicker">B2B marketing &middot; team presentation</div>
+      <div class="d-kicker">B2B marketing &middot; deep dive</div>
       <div class="d-title">How does a start-up sell to a <em>giant</em>?</div>
       <p class="d-p" style="max-width:26rem">Reaching big players with a product nobody has heard of yet.</p>
       <div class="grow"></div>
@@ -24,7 +25,7 @@
   </section>
 
   <!-- 2 SET-UP -->
-  <section class="slide" data-part="The game" data-lead="1">
+  <section class="slide" data-part="The hook" data-lead="1">
     <div class="d-cols wide-l">
       <div>
         <div class="d-kicker">Before we explain it</div>
@@ -43,27 +44,71 @@
   </section>
 
   <!-- 3 LIVE GAME -->
-  <section class="slide" data-part="The game" data-lead="1" data-live="game"></section>
+  <section class="slide" data-part="The hook" data-lead="1" data-live="game"></section>
 
   <!-- 4 LIVE QUICK REVEAL -->
-  <section class="slide" data-part="The game" data-lead="1" data-live="quick"></section>
+  <section class="slide" data-part="The hook" data-lead="1" data-live="quick"></section>
 
   <!-- 5 ROADMAP -->
-  <section class="slide" data-part="Where we are going" data-lead="1">
-    <div class="d-kicker">You just felt it. Now let us explain it.</div>
-    <div class="d-h" style="margin:0.6rem 0 2rem">Three questions</div>
-    <ul class="d-list" style="gap:1.6rem">
-      <li class="step"><i>1</i><span style="font-size:2.2rem">Why is the door closed?<small style="font-size:1.25rem">What a big company risks when it buys from a start-up.</small></span></li>
-      <li class="step"><i>2</i><span style="font-size:2.2rem">What opens it?<small style="font-size:1.25rem">Four ways in, checked against what happened in this room.</small></span></li>
-      <li class="step"><i>3</i><span style="font-size:2.2rem">What would you do on Monday?<small style="font-size:1.25rem">Your plan for one enterprise target.</small></span></li>
-    </ul>
+  <section class="slide" data-part="Roadmap" data-lead="1">
+    <div class="d-kicker">You just felt it. Now the six questions a manager would ask.</div>
+    <div class="d-h" style="margin:0.5rem 0 1.4rem">Where we are going</div>
+    <div class="d-road">
+      <div><i>1</i><b>What is it, and why now?</b><span>Start-ups selling to large enterprises.</span></div>
+      <div><i>2</i><b>How and why does it work?</b><span>The buyer's risk, and four ways to lower it.</span></div>
+      <div><i>3</i><b>Who is it best for?</b><span>Criteria you can apply to your own company.</span></div>
+      <div><i>4</i><b>Where does it fall short?</b><span>The risks, and a deal that went wrong.</span></div>
+      <div><i>5</i><b>Your turn</b><span>Back to our room, then your plan.</span></div>
+      <div><i>6</i><b>Where is it heading?</b><span>What changes next, and what to do first.</span></div>
+    </div>
   </section>
 
-  <!-- 6 PART 1: RISK -->
-  <section class="slide" data-part="1 &middot; Why is the door closed?" data-lead="2">
+  <!-- ============ 1 THE PHENOMENON ============ -->
+  <!-- 6 WHAT IT IS, HOW BIG -->
+  <section class="slide" data-part="1 &middot; What is it, and why now?" data-lead="1">
+    <div class="d-cols top wide-l">
+      <div style="display:flex;flex-direction:column;gap:1.1rem;justify-content:center">
+        <div class="d-kicker">The phenomenon</div>
+        <div class="d-big" style="font-size:3.4rem">A young company with no track record wins a <em>large organisation</em> as a customer.</div>
+        <p class="d-p" id="def-note"></p>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:1rem;justify-content:center">
+        <span class="d-tag world" style="align-self:flex-start">How big</span>
+        <div id="fact-size" style="display:grid;gap:1rem"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7 WHY NOW -->
+  <section class="slide" data-part="1 &middot; What is it, and why now?" data-lead="1">
+    <div class="d-h" style="margin-bottom:1.3rem">Why now</div>
+    <div id="fact-whynow" class="d-grid3 tall"></div>
+    <div class="d-take step">More new software than ever, bought by people who would rather not meet a salesperson.</div>
+  </section>
+
+  <!-- 8 THREE EXAMPLES -->
+  <section class="slide" data-part="1 &middot; What is it, and why now?" data-lead="1">
+    <div class="d-h" style="margin-bottom:1.3rem">Three that got in</div>
+    <div id="examples" class="d-grid3 tall"></div>
+  </section>
+
+  <!-- ============ 2 HOW AND WHY DOES IT WORK ============ -->
+  <!-- 9 THE CAUSAL CHAIN -->
+  <section class="slide" data-part="2 &middot; How and why does it work?" data-lead="2">
+    <div class="d-kicker">The whole argument on one slide</div>
+    <div class="d-h" style="margin:0.4rem 0 1.4rem">Why the door is closed, and what opens it</div>
+    <div class="d-chain" id="chain"></div>
+    <div class="d-break step">
+      <div class="d-kicker" style="color:var(--brand-ink)">What breaks the chain: lower the buyer's risk</div>
+      <div class="d-breakrow"><span>1 &nbsp;Borrow trust</span><span>2 &nbsp;Show proof</span><span>3 &nbsp;Shrink the first step</span><span>4 &nbsp;Walk in with a partner</span></div>
+    </div>
+  </section>
+
+  <!-- 10 RISK -->
+  <section class="slide" data-part="2 &middot; How and why does it work?" data-lead="2">
     <div class="d-cols">
       <div>
-        <div class="d-kicker">The first thing to understand</div>
+        <div class="d-kicker">Link 1 and 2 of the chain</div>
         <div class="d-big" style="margin:0.5rem 0 1rem;font-size:3.5rem">The buyer is not buying a product. The buyer is buying a <em>risk</em>.</div>
         <p class="d-p step" style="font-size:1.35rem">If the start-up fails, the buyer answers for it. If the incumbent fails, nobody blames the buyer.</p>
         <div id="fact-risk" class="step" style="margin-top:1rem"></div>
@@ -72,8 +117,8 @@
     </div>
   </section>
 
-  <!-- 7 INCUMBENT -->
-  <section class="slide" data-part="1 &middot; Why is the door closed?" data-lead="2">
+  <!-- 11 INCUMBENT -->
+  <section class="slide" data-part="2 &middot; How and why does it work?" data-lead="2">
     <div class="d-h" style="margin-bottom:1.2rem">The safest choice is the one you already made</div>
     <div class="d-cols top wide-r">
       <div style="display:flex;flex-direction:column;gap:1rem">
@@ -88,27 +133,26 @@
     </div>
   </section>
 
-  <!-- 8 COMMITTEE -->
-  <section class="slide" data-part="1 &middot; Why is the door closed?" data-lead="2">
+  <!-- 12 COMMITTEE -->
+  <section class="slide" data-part="2 &middot; How and why does it work?" data-lead="2">
     <div class="d-cols">
       <div class="d-art" style="height:30rem"><img src="art/committee.jpg" alt=""></div>
       <div>
-        <div class="d-kicker">And in real life it is harder than our game</div>
-        <div class="d-big" style="margin:0.6rem 0 1.4rem">You pitched one buyer. A real start-up pitches a <em>committee</em>.</div>
+        <div class="d-big" style="margin:0 0 0.8rem;font-size:2.5rem">You pitched one buyer. A real start-up pitches a <em>committee</em>.</div>
         <div id="fact-committee" style="display:grid;gap:1rem"></div>
       </div>
     </div>
   </section>
 
-  <!-- 9 DISCUSSION 1 -->
-  <section class="slide" data-part="1 &middot; Why is the door closed?" data-lead="2">
+  <!-- 13 QUESTION FOR THE CLASS -->
+  <section class="slide" data-part="2 &middot; How and why does it work?" data-lead="2">
     <div class="d-cols top wide-l">
       <div style="display:flex;flex-direction:column;gap:1.2rem">
-        <div class="d-kicker">Discussion 1 &middot; buyers first</div>
-        <div class="d-big">Buyers: what made you say <em>no</em>?</div>
+        <div class="d-kicker">Question for the buyers</div>
+        <div class="d-big">What made you say <em>no</em>?</div>
         <p class="d-p">Think of one seller you turned down. What would they have needed to say, show or offer?</p>
         <div class="grow"></div>
-        <div><span class="d-timer" data-seconds="180"></span></div>
+        <div><span class="d-timer" data-seconds="120"></span></div>
       </div>
       <div style="display:flex;flex-direction:column;gap:1rem">
         <span class="d-tag room" style="align-self:flex-start">In this room</span>
@@ -117,35 +161,35 @@
     </div>
   </section>
 
-  <!-- 10 FOUR WAYS IN -->
-  <section class="slide" data-part="2 &middot; What opens the door?" data-lead="3">
-    <div class="d-h" style="margin-bottom:1.3rem">Four ways in</div>
+  <!-- 14 FOUR WAYS IN -->
+  <section class="slide" data-part="2 &middot; How and why does it work?" data-lead="3">
+    <div class="d-h" style="margin-bottom:1.3rem">Four ways to lower the buyer's risk</div>
     <div class="d-ways">
       <div class="d-way step"><img src="art/door-relationship.jpg" alt=""><div class="tx"><div class="no">1</div><div class="k">Borrow trust</div><div class="s">Arrive through someone the buyer already trusts.</div></div></div>
       <div class="d-way step"><img src="art/door-proof.jpg" alt=""><div class="tx"><div class="no">2</div><div class="k">Show proof</div><div class="s">Reference customers, certifications, results others can check.</div></div></div>
-      <div class="d-way step"><img src="art/door-pilot.jpg" alt=""><div class="tx"><div class="no">3</div><div class="k">Shrink the risk</div><div class="s">A pilot turns one big yes into a small, safe one.</div></div></div>
+      <div class="d-way step"><img src="art/door-pilot.jpg" alt=""><div class="tx"><div class="no">3</div><div class="k">Shrink the first step</div><div class="s">A pilot turns one big yes into a small, safe one.</div></div></div>
       <div class="d-way step"><img src="art/door-partner.jpg" alt=""><div class="tx"><div class="no">4</div><div class="k">Walk in with a partner</div><div class="s">Marketplaces, integrators and corporate programmes already inside.</div></div></div>
     </div>
   </section>
 
-  <!-- 11 WAY 1 -->
-  <section class="slide" data-part="2 &middot; What opens the door?" data-lead="3">
+  <!-- 15 WAY 1 -->
+  <section class="slide" data-part="2 &middot; How and why does it work?" data-lead="3">
     <div class="d-h" style="margin-bottom:1.2rem"><span style="color:var(--accent)">1</span> &nbsp;Borrow trust</div>
     <div class="d-cols top">
       <div style="display:flex;flex-direction:column;gap:1rem">
         <span class="d-tag room" style="align-self:flex-start">In this room</span>
         <div data-panel="conn"></div>
+        <p class="d-small">In our game a connection gave no points. It gave information, and a place at the top of the inbox.</p>
       </div>
       <div style="display:flex;flex-direction:column;gap:1rem">
         <span class="d-tag world" style="align-self:flex-start">In the real world</span>
         <div id="fact-trust" style="display:grid;gap:1rem"></div>
-        <p class="d-small">In our game a connection gave no points. It only gave information and a place at the top of the inbox.</p>
       </div>
     </div>
   </section>
 
-  <!-- 12 WAY 2 -->
-  <section class="slide" data-part="2 &middot; What opens the door?" data-lead="3">
+  <!-- 16 WAY 2 -->
+  <section class="slide" data-part="2 &middot; How and why does it work?" data-lead="3">
     <div class="d-h" style="margin-bottom:1.2rem"><span style="color:var(--accent)">2</span> &nbsp;Show proof</div>
     <div class="d-cols top">
       <div style="display:flex;flex-direction:column;gap:1rem">
@@ -159,9 +203,9 @@
     </div>
   </section>
 
-  <!-- 13 WAY 3 -->
-  <section class="slide" data-part="2 &middot; What opens the door?" data-lead="4">
-    <div class="d-h" style="margin-bottom:1.2rem"><span style="color:var(--accent)">3</span> &nbsp;Shrink the risk</div>
+  <!-- 17 WAY 3 -->
+  <section class="slide" data-part="2 &middot; How and why does it work?" data-lead="3">
+    <div class="d-h" style="margin-bottom:1.2rem"><span style="color:var(--accent)">3</span> &nbsp;Shrink the first step</div>
     <div class="d-cols top">
       <div style="display:flex;flex-direction:column;gap:1rem">
         <span class="d-tag room" style="align-self:flex-start">In this room</span>
@@ -174,20 +218,20 @@
     </div>
   </section>
 
-  <!-- 14 WAY 4 -->
-  <section class="slide" data-part="2 &middot; What opens the door?" data-lead="4">
+  <!-- 18 WAY 4 -->
+  <section class="slide" data-part="2 &middot; How and why does it work?" data-lead="3">
     <div class="d-cols">
       <div>
         <div class="d-h" style="margin-bottom:1.2rem"><span style="color:var(--accent)">4</span> &nbsp;Walk in with a partner</div>
-        <p class="d-p" style="margin-bottom:1.2rem">Our game had no partners. Real start-ups often enter through someone who is already an approved supplier.</p>
+        <p class="d-p" style="margin-bottom:1.2rem">Our game had no partners. Real start-ups often enter beside someone who is already an approved supplier.</p>
         <div id="fact-partner" style="display:grid;gap:1rem"></div>
       </div>
       <div class="d-art" style="height:30rem"><img src="art/door-partner.jpg" alt=""></div>
     </div>
   </section>
 
-  <!-- 15 PRICE -->
-  <section class="slide" data-part="2 &middot; What opens the door?" data-lead="4">
+  <!-- 19 PRICE -->
+  <section class="slide" data-part="2 &middot; How and why does it work?" data-lead="3">
     <div class="d-h" style="margin-bottom:1.2rem">And price? It was not the way in</div>
     <div class="d-cols top">
       <div style="display:flex;flex-direction:column;gap:1rem">
@@ -202,40 +246,41 @@
     </div>
   </section>
 
-  <!-- 16 CASE -->
-  <section class="slide" data-part="2 &middot; What opens the door?" data-lead="4">
-    <div class="d-kicker">A real one</div>
-    <div id="case-body" style="flex:1;min-height:0;display:flex;flex-direction:column"></div>
+  <!-- ============ 3 WHO IS IT BEST FOR ============ -->
+  <!-- 20 CRITERIA -->
+  <section class="slide" data-part="3 &middot; Who is it best for?" data-lead="4">
+    <div class="d-h" style="margin-bottom:1.1rem">Should your company sell to giants? Four tests</div>
+    <div id="fit" style="flex:1;min-height:0"></div>
   </section>
 
-  <!-- 17 DISCUSSION 2 -->
-  <section class="slide" data-part="3 &middot; What would you do on Monday?" data-lead="5">
-    <div class="d-cols wide-l">
-      <div style="display:flex;flex-direction:column;gap:1.2rem;height:100%;justify-content:center">
-        <div class="d-kicker">Discussion 2 &middot; in pairs</div>
-        <div class="d-big">You are the founder. One enterprise target. <em>90 days</em>.</div>
-        <p class="d-p">What are your first three moves? Use the four ways in.</p>
-        <div><span class="d-timer" data-seconds="240"></span></div>
+  <!-- 21 FIT CASES -->
+  <section class="slide" data-part="3 &middot; Who is it best for?" data-lead="4">
+    <div class="d-h" style="margin-bottom:1.3rem">What a good fit looks like</div>
+    <div id="fact-fitcases" class="d-grid3 tall"></div>
+  </section>
+
+  <!-- ============ 4 WHERE DOES IT FALL SHORT ============ -->
+  <!-- 22 LIMITS -->
+  <section class="slide" data-part="4 &middot; Where does it fall short?" data-lead="4">
+    <div class="d-cols top wide-r">
+      <div style="display:flex;flex-direction:column;gap:1.1rem">
+        <div class="d-h">The giant can also hurt you</div>
+        <div class="d-art" style="flex:1;min-height:0"><img src="art/incumbent.jpg" alt=""></div>
       </div>
-      <div class="d-art" style="height:28rem"><img src="art/incumbent.jpg" alt=""></div>
+      <div id="fact-limits" style="display:grid;gap:1rem;align-content:start"></div>
     </div>
   </section>
 
-  <!-- 18 PLAYBOOK -->
-  <section class="slide" data-part="3 &middot; What would you do on Monday?" data-lead="5">
-    <div class="d-h" style="margin-bottom:1.6rem">The Monday-morning list</div>
-    <ul class="d-list" style="gap:1.15rem">
-      <li class="step"><i>1</i><span>Map who you already know inside, and who can introduce you.<small>A warm path beats a better pitch.</small></span></li>
-      <li class="step"><i>2</i><span>Find the buyer's hidden priority and their boss's rule before you quote.<small>The sellers who knew them in our game wrote better term sheets.</small></span></li>
-      <li class="step"><i>3</i><span>Bring proof the buyer can show upward.<small>One reference customer, one certification, one number.</small></span></li>
-      <li class="step"><i>4</i><span>Offer a small first step.<small>A pilot the buyer can defend if it fails.</small></span></li>
-      <li class="step"><i>5</i><span>Do not lead with a discount.<small>You are competing with "do nothing", not with a price.</small></span></li>
-    </ul>
+  <!-- 23 A FAILURE -->
+  <section class="slide" data-part="4 &middot; Where does it fall short?" data-lead="4">
+    <div class="d-kicker">When it goes wrong</div>
+    <div id="failure-body" style="flex:1;min-height:0;display:flex;flex-direction:column"></div>
   </section>
 
-  <!-- 19 CLOSE WITH THE ROOM -->
-  <section class="slide" data-part="Back to the room" data-lead="5">
-    <div class="d-h" style="margin-bottom:1.2rem">What sellers believed, what buyers said, and how risky it really was</div>
+  <!-- ============ 5 YOUR TURN ============ -->
+  <!-- 24 BACK TO THE ROOM -->
+  <section class="slide" data-part="5 &middot; Your turn" data-lead="5">
+    <div class="d-h" style="margin-bottom:1.2rem">Back to our room: what sellers believed, what buyers said</div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1.3rem;align-items:start">
       <div data-panel="sellersLost"></div>
       <div data-panel="signed"></div>
@@ -243,13 +288,52 @@
     </div>
   </section>
 
-  <!-- 20 SOURCES -->
-  <section class="slide" data-part="Sources">
-    <div class="d-h" style="margin-bottom:1rem">Sources</div>
-    <ol class="d-sources" id="sources"></ol>
+  <!-- 25 GROUP TASK -->
+  <section class="slide" data-part="5 &middot; Your turn" data-lead="5">
+    <div class="d-cols wide-l">
+      <div style="display:flex;flex-direction:column;gap:1.1rem;height:100%;justify-content:center">
+        <div class="d-kicker">In your table group</div>
+        <div class="d-big" style="font-size:3.6rem">You are the founder. One enterprise target. <em>90 days</em>.</div>
+        <ul class="d-list" style="gap:0.7rem">
+          <li><i>1</i><span style="font-size:1.35rem">Pick the start-up one of you just played.</span></li>
+          <li><i>2</i><span style="font-size:1.35rem">Agree your first three moves, in order.</span></li>
+          <li><i>3</i><span style="font-size:1.35rem">Report back: your first move, and the risk it removes for the buyer.</span></li>
+        </ul>
+        <div><span class="d-timer" data-seconds="300"></span></div>
+      </div>
+      <div class="d-art" style="height:28rem"><img src="art/door-pilot.jpg" alt=""></div>
+    </div>
   </section>
 
-  <!-- 21 END -->
+  <!-- ============ 6 WHERE IS IT HEADING ============ -->
+  <!-- 26 PREDICTIONS -->
+  <section class="slide" data-part="6 &middot; Where is it heading?" data-lead="5">
+    <div class="d-h" style="margin-bottom:1.3rem">Where it is heading</div>
+    <div id="fact-future" class="d-grid3 tall"></div>
+    <div class="d-fact step" style="margin-top:1.3rem;background:var(--brand);color:var(--brand-ink);box-shadow:0.3rem 0.3rem 0 var(--accent)"><div class="t" style="font-size:1.35rem">Our reading: software will do the first screening, so proof a machine can check matters more. People will still decide the risky deals, so trust matters as much as ever.</div></div>
+  </section>
+
+  <!-- 27 PLAYBOOK -->
+  <section class="slide" data-part="6 &middot; Where is it heading?" data-lead="5">
+    <div class="d-h" style="margin-bottom:1.1rem">If you run that start-up: what to do, in order</div>
+    <div id="playbook" style="flex:1;min-height:0"></div>
+  </section>
+
+  <!-- 28-29 SOURCES -->
+  <section class="slide" data-part="References">
+    <div class="d-h" style="margin-bottom:0.8rem;font-size:2.2rem">References</div>
+    <ul class="d-sources" id="sources1"></ul>
+  </section>
+  <section class="slide" data-part="References">
+    <div class="d-h" style="margin-bottom:0.8rem;font-size:2.2rem">References (continued)</div>
+    <ul class="d-sources" id="sources2"></ul>
+  </section>
+  <section class="slide" data-part="References">
+    <div class="d-h" style="margin-bottom:0.8rem;font-size:2.2rem">References (continued)</div>
+    <ul class="d-sources" id="sources3"></ul>
+  </section>
+
+  <!-- 30 END -->
   <section class="slide" data-bare>
     <div class="d-hero"><img src="art/hero.jpg" alt=""></div>
     <div class="d-hero-tx">
@@ -273,6 +357,7 @@
 <script src="js/stats.js"></script>
 <script src="js/views.js"></script>
 <script src="js/facts.js"></script>
+<script src="js/facts-render.js"></script>
 <script src="js/deck.js"></script>
 </body>
 </html>
