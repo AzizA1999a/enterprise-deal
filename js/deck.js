@@ -80,6 +80,7 @@
 
   document.addEventListener("keydown", function (ev) {
     if (ev.target && /INPUT|TEXTAREA/.test(ev.target.tagName)) return;
+    if (document.querySelector(".d-vid")) return;
     var k = ev.key;
     if (k === "ArrowRight" || k === "PageDown" || k === " " || k === "Enter") { ev.preventDefault(); next(); }
     else if (k === "ArrowLeft" || k === "PageUp" || k === "Backspace") { ev.preventDefault(); prev(); }
@@ -184,6 +185,43 @@
       if (window.confirm("Lock the market now?")) run(api.host(c.code, c.pin, "lock"));
     }
   });
+
+  // ---------- an optional clip (config.js "video"), opened over the slide ----------
+  var vid = cfg.video && cfg.video.url ? cfg.video : null, vidBox = null;
+  function embedUrl(v) {
+    var u = v.url, id = null, m;
+    if ((m = u.match(/youtu\.be\/([\w-]{6,})/)) || (m = u.match(/[?&]v=([\w-]{6,})/)) || (m = u.match(/\/embed\/([\w-]{6,})/))) id = m[1];
+    if (!id) return null;
+    return "https://www.youtube-nocookie.com/embed/" + id + "?autoplay=1&rel=0&modestbranding=1" +
+      (v.start ? "&start=" + Math.floor(v.start) : "") + (v.end ? "&end=" + Math.floor(v.end) : "");
+  }
+  function openClip() {
+    if (!vid || vidBox) return;
+    var yt = embedUrl(vid), media;
+    if (yt) media = '<iframe src="' + esc(yt) + '" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>';
+    else media = '<video src="' + esc(vid.url) + (vid.start ? "#t=" + vid.start + (vid.end ? "," + vid.end : "") : "") + '" controls autoplay></video>';
+    vidBox = document.createElement("div");
+    vidBox.className = "d-vid";
+    vidBox.innerHTML = '<div class="d-vid-in">' + media + '<div class="d-vid-cap"><span>' + esc(vid.title || "") + (vid.src ? ' <span class="d-src">' + esc(vid.src) + "</span>" : "") +
+      '</span><button type="button" data-vid="close">Close (Esc)</button></div></div>';
+    vidBox.addEventListener("click", function (ev) { if (ev.target === vidBox || ev.target.getAttribute("data-vid") === "close") closeClip(); });
+    document.body.appendChild(vidBox);
+  }
+  function closeClip() { if (vidBox) { vidBox.remove(); vidBox = null; } }
+  if (vid) {
+    var clipSlide = slides[(Number(vid.slide) || 8) - 1];
+    if (clipSlide) {
+      var btn = document.createElement("button");
+      btn.type = "button"; btn.className = "d-vidbtn"; btn.textContent = "\u25B6  Play the clip";
+      btn.addEventListener("click", function (ev) { ev.stopPropagation(); openClip(); });
+      clipSlide.querySelector(".body").appendChild(btn);
+    }
+    document.addEventListener("keydown", function (ev) {
+      if (ev.target && /INPUT|TEXTAREA/.test(ev.target.tagName)) return;
+      if (ev.key === "Escape") closeClip();
+      else if ((ev.key === "v" || ev.key === "V") && slides[D.i] === clipSlide) openClip();
+    }, true);
+  }
 
   // ---------- discussion timers ----------
   var timers = [];

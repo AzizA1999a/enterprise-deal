@@ -16,7 +16,7 @@ window.B2B_CONFIG = {
   // Role split and timing.
   sellerShare: 0.6,          // about 60% sellers, 40% buyers
   briefingSeconds: 60,       // role card reading time before the market opens
-  marketSeconds: 600,        // 10 minutes of walking and talking
+  marketSeconds: 480,        // 8 minutes of walking and talking (was 10; shortened to keep the opening short)
   extendSeconds: 60,         // the "+1 minute" button
   offersPerSeller: 3,        // term sheets a seller can open (each can be edited while it is unanswered)
   requireMeetingCode: true,  // a seller needs the buyer's desk number, shown only on the buyer's phone
@@ -75,6 +75,13 @@ window.B2B_CONFIG = {
     lowestCostSavingsPct: 25,  // "lowest cost" is met at 25% or more under the incumbent
     fastestDeployWeeks: 4      // "fastest deployment" is met at 4 weeks or less
   },
+
+  // An optional short clip for the slides. Leave url empty and nothing shows.
+  // When set, a "Play the clip" button appears on the slide numbered below (press V there too).
+  // url: a YouTube link (watch, youtu.be or embed) or a direct .mp4 file.
+  // start / end: seconds into the clip; 0 = from the beginning / to the end.
+  // src: the source note shown under the clip (the brief asks for one on every slide with outside material).
+  video: { url: "", start: 0, end: 0, title: "", src: "", slide: 8 },
 
   // How often phones and screens ask the server for news (milliseconds).
   pollMs: { market: 1500, idle: 3000 }

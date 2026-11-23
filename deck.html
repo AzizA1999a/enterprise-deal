@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex">
   <title>The Enterprise Deal &middot; Presentation</title>
-  <link rel="stylesheet" href="css/theme.css?v=2026-11-20d">
-  <link rel="stylesheet" href="css/app.css?v=2026-11-20d">
+  <link rel="stylesheet" href="css/theme.css?v=2026-11-22a">
+  <link rel="stylesheet" href="css/app.css?v=2026-11-22a">
 </head>
 <body>
 <div id="deck">
@@ -32,7 +32,7 @@
         <div class="d-big" style="margin:0.6rem 0 1.6rem">You are going to <em>live</em> it.</div>
         <ul class="d-list">
           <li><i>1</i><span>Scan the code. You become a start-up founder or an enterprise buyer.<small>Your phone shows a private role card.</small></span></li>
-          <li><i>2</i><span>Stand up. You have 10 minutes to walk, pitch and negotiate out loud.<small>Sellers: ask before you offer. You cannot give everything to everyone.</small></span></li>
+          <li><i>2</i><span>Stand up. You have <span data-market-min>8</span> minutes to walk, pitch and negotiate out loud.<small>Sellers: ask before you offer. You cannot give everything to everyone.</small></span></li>
           <li><i>3</i><span>Agreed? The seller writes the term sheet, the buyer signs it.<small>Buyers can sign one deal, or stay with what they have.</small></span></li>
           <li><i>4</i><span>The big vendors fight back.<small>Each buyer's current supplier has an account manager, played by the computer. It answers every start-up offer.</small></span></li>
         </ul>
@@ -59,7 +59,7 @@
       <div><i>2</i><b>How and why does it work?</b><span>The buyer's risk, and four ways to lower it.</span></div>
       <div><i>3</i><b>Who is it best for?</b><span>Criteria you can apply to your own company.</span></div>
       <div><i>4</i><b>Where does it fall short?</b><span>The risks, and a deal that went wrong.</span></div>
-      <div><i>5</i><b>Your turn</b><span>Back to our room, then your plan.</span></div>
+      <div><i>5</i><b>Your turn</b><span>A 90-day plan for one start-up, in groups.</span></div>
       <div><i>6</i><b>Where is it heading?</b><span>What changes next, and what to do first.</span></div>
     </div>
   </section>
@@ -114,7 +114,10 @@
         <p class="d-p step" style="font-size:1.35rem">If the start-up fails, the buyer answers for it. If the incumbent fails, nobody blames the buyer.</p>
         <div id="fact-risk" class="step" style="margin-top:1rem"></div>
       </div>
-      <div class="d-art" style="height:28rem"><img src="art/risk.jpg" alt=""></div>
+      <div style="display:flex;flex-direction:column;gap:1rem">
+        <span class="d-tag room" style="align-self:flex-start">In this room</span>
+        <div data-panel="delivery"></div>
+      </div>
     </div>
   </section>
 
@@ -159,6 +162,16 @@
         <span class="d-tag room" style="align-self:flex-start">In this room</span>
         <div data-panel="reject"></div>
       </div>
+    </div>
+  </section>
+
+  <!-- 14 SELLERS BELIEVED, BUYERS SAID (moved up from section 5, next to the buyer's side) -->
+  <section class="slide" data-part="2 &middot; How and why does it work?" data-lead="2">
+    <div class="d-h" style="margin-bottom:1.2rem">What sellers believed, and what buyers said</div>
+    <div style="display:grid;grid-template-columns:1.25fr 1fr 1fr;gap:1.1rem;align-items:start">
+      <div data-panel="read"></div>
+      <div data-panel="sellersLost"></div>
+      <div data-panel="signed"></div>
     </div>
   </section>
 
@@ -247,6 +260,13 @@
     </div>
   </section>
 
+  <!-- WHAT SURPRISED US (our own view, before section 3) -->
+  <section class="slide" data-part="2 &middot; How and why does it work?" data-lead="3">
+    <div class="d-kicker">Our take</div>
+    <div class="d-h" style="margin:0.4rem 0 1.3rem">What surprised us</div>
+    <div id="fact-surprised" class="d-grid3 tall" data-step-each></div>
+  </section>
+
   <!-- ============ 3 WHO IS IT BEST FOR ============ -->
   <!-- 20 CRITERIA -->
   <section class="slide" data-part="3 &middot; Who is it best for?" data-lead="3">
@@ -278,18 +298,28 @@
     <div id="failure-body" style="flex:1;min-height:0;display:flex;flex-direction:column"></div>
   </section>
 
-  <!-- ============ 5 YOUR TURN ============ -->
-  <!-- 24 BACK TO THE ROOM -->
-  <section class="slide" data-part="5 &middot; Your turn" data-lead="4">
-    <div class="d-h" style="margin-bottom:1.2rem">Back to our room: what sellers believed, what buyers said</div>
-    <div style="display:grid;grid-template-columns:1.25fr 1fr 1fr 1fr;gap:1.1rem;align-items:start">
-      <div data-panel="read"></div>
-      <div data-panel="sellersLost"></div>
-      <div data-panel="signed"></div>
-      <div data-panel="delivery"></div>
+  <!-- YOUR CALL: when one giant becomes the business -->
+  <section class="slide" data-part="4 &middot; Where does it fall short?" data-lead="4">
+    <div class="d-cols top wide-l">
+      <div style="display:flex;flex-direction:column;gap:1.1rem">
+        <div class="d-kicker">Your call</div>
+        <div class="d-big" style="font-size:3.2rem">Your biggest customer is now <em>40%</em> of your revenue. It asks for exclusivity.</div>
+        <ul class="d-list" style="gap:0.7rem">
+          <li><i>1</i><span style="font-size:1.4rem">Do you sign? On what terms?</span></li>
+          <li class="step"><i>2</i><span style="font-size:1.4rem">Next month, your champion inside that company leaves. Now what?</span></li>
+        </ul>
+        <div class="grow"></div>
+        <div><span class="d-timer" data-seconds="60"></span></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:1rem">
+        <div class="d-art" style="height:20rem"><img src="art/buyer.jpg" alt=""></div>
+        <div class="d-fact"><div class="t" style="font-size:1.25rem">Remember GT Advanced: exclusive, with no promise to buy.</div></div>
+        <p class="d-small">A scenario for discussion, not data.</p>
+      </div>
     </div>
   </section>
 
+  <!-- ============ 5 YOUR TURN ============ -->
   <!-- 25 GROUP TASK -->
   <section class="slide" data-part="5 &middot; Your turn" data-lead="4">
     <div class="d-cols wide-l">
@@ -298,8 +328,8 @@
         <div class="d-big" style="font-size:3.6rem">You are the founder. One enterprise target. <em>90 days</em>.</div>
         <ul class="d-list" style="gap:0.7rem">
           <li><i>1</i><span style="font-size:1.35rem">Pick the start-up one of you just played.</span></li>
-          <li><i>2</i><span style="font-size:1.35rem">Agree your first three moves, in order.</span></li>
-          <li><i>3</i><span style="font-size:1.35rem">Report back: your first move, and the risk it removes for the buyer.</span></li>
+          <li><i>2</i><span style="font-size:1.35rem">You can afford only two of the four ways in: borrow trust, show proof, a small pilot, a partner. Choose two, in order.<small>What do you give up by skipping the other two?</small></span></li>
+          <li><i>3</i><span style="font-size:1.35rem">Report back: your first move, the risk it removes for the buyer, and what you gave up.</span></li>
         </ul>
         <div><span class="d-timer" data-seconds="300"></span></div>
       </div>
@@ -351,15 +381,15 @@
 <div id="deckhelp">&larr; &rarr; move &nbsp;&middot;&nbsp; F full screen</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
-<script src="js/config.js?v=2026-11-20d"></script>
-<script src="js/engine.js?v=2026-11-20d"></script>
-<script src="js/api.js?v=2026-11-20d"></script>
-<script src="js/ui.js?v=2026-11-20d"></script>
-<script src="js/driver.js?v=2026-11-20d"></script>
-<script src="js/stats.js?v=2026-11-20d"></script>
-<script src="js/views.js?v=2026-11-20d"></script>
-<script src="js/facts.js?v=2026-11-20d"></script>
-<script src="js/facts-render.js?v=2026-11-20d"></script>
-<script src="js/deck.js?v=2026-11-20d"></script>
+<script src="js/config.js?v=2026-11-22a"></script>
+<script src="js/engine.js?v=2026-11-22a"></script>
+<script src="js/api.js?v=2026-11-22a"></script>
+<script src="js/ui.js?v=2026-11-22a"></script>
+<script src="js/driver.js?v=2026-11-22a"></script>
+<script src="js/stats.js?v=2026-11-22a"></script>
+<script src="js/views.js?v=2026-11-22a"></script>
+<script src="js/facts.js?v=2026-11-22a"></script>
+<script src="js/facts-render.js?v=2026-11-22a"></script>
+<script src="js/deck.js?v=2026-11-22a"></script>
 </body>
 </html>

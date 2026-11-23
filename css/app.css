@@ -330,6 +330,7 @@ html.deck { font-size: 20.8px; }
 .d-grid3.tall { flex: 1; min-height: 0; align-items: stretch; }
 .d-grid3.tall .d-fact { display: flex; flex-direction: column; padding: 1.4rem 1.5rem; }
 .d-grid3.tall .d-fact .n { font-size: 5.6rem; }
+#fact-surprised .d-fact .n { font-size: 4.2rem; white-space: nowrap; }
 .d-grid3.tall .d-fact .t { font-size: 1.55rem; line-height: 1.25; margin-top: 0.9rem; flex: 1; }
 .d-grid3.tall .d-fact .d-src { font-size: 0.8rem; }
 .d-grid3.tall .d-ex { padding: 1.4rem 1.5rem; }
@@ -368,3 +369,13 @@ html.deck { font-size: 20.8px; }
 .d-play span em { font-style: normal; font-weight: 800; color: var(--bad); }
 .d-sources { list-style: none; padding: 0; margin: 0; }
 .d-sources li { padding-left: 1.6rem; text-indent: -1.6rem; }
+
+/* optional clip on a slide (config.js "video") */
+.d-vidbtn { position: absolute; right: 2.5rem; top: 5.4rem; font: inherit; font-weight: 800; font-size: 1.15rem; padding: 0.8rem 1.4rem;
+  border: 2.5px solid var(--ink); border-radius: 999px; background: var(--accent); color: var(--accent-ink); box-shadow: 0.25rem 0.25rem 0 var(--ink); cursor: pointer; }
+.d-vid { position: fixed; inset: 0; z-index: 50; background: rgba(10, 16, 40, 0.86); display: grid; place-items: center; padding: 3vh 3vw; }
+.d-vid-in { width: min(92vw, 160vh); display: flex; flex-direction: column; gap: 0.8rem; }
+.d-vid-in iframe, .d-vid-in video { width: 100%; aspect-ratio: 16 / 9; border: 0; border-radius: 12px; background: #000; }
+.d-vid-cap { display: flex; justify-content: space-between; align-items: center; gap: 1rem; color: #fff; font-size: 1rem; }
+.d-vid-cap .d-src { color: rgba(255, 255, 255, 0.7); }
+.d-vid-cap button { font: inherit; font-weight: 700; padding: 0.4rem 0.9rem; border-radius: 999px; border: 2px solid #fff; background: transparent; color: #fff; cursor: pointer; }

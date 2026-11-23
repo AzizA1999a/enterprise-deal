@@ -89,6 +89,15 @@ window.B2B_FACTS = {
     { n: "95%", t: "of Microsoft's commercial revenue flows through its partner ecosystem.",
       src: "Schuster, Official Microsoft Blog, Feb 2019. The company's own claim." }
   ],
+  // Our own view, said as opinions: "What surprised us was..." Each one repeats a sourced finding from the slides before it.
+  surprised: [
+    { n: "40-60%", t: "of deals are lost to no decision at all. We expected rival start-ups to be the threat. The real rival is \"do nothing\".",
+      src: "Dixon and McKenna, Harvard Business Review, 2022." },
+    { n: "27th of 36", t: "is where cost ranks as a driver of B2B loyalty. We expected price to be the way in. It is the ticket, not the win.",
+      src: "Almquist, Cleghorn and Sherer, Harvard Business Review, 2018." },
+    { n: "84%", t: "\"of deals start with a referral\" is quoted everywhere. We traced it to a vendor's marketing page. Check the source before you build a plan on it.",
+      src: "Our own check: we found no rigorous public study behind it." }
+  ],
   price: [
     { n: "27th of 36", t: "is where cost reduction ranked as a driver of customer loyalty, although buyers said it mattered most.",
       src: "Almquist, Cleghorn and Sherer, Harvard Business Review, 2018. Measures loyalty, not the first purchase." },
