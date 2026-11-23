@@ -280,6 +280,10 @@ html.deck { font-size: 20.8px; }
 .d-hero img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .d-hero-tx { position: relative; padding: 4.2rem 3rem; width: 50%; display: flex; flex-direction: column; gap: 1.2rem; height: 100%; }
 .d-hero-tx .d-title { font-size: 4.9rem; }
+/* The title slide's text sits beside a diagonal illustration: keep it narrow so no line runs into the picture. */
+.d-you { max-width: 21.5rem; font-size: 1.3rem; }
+.d-why { max-width: 20rem; }
+.d-why p { font-size: 1.1rem; font-weight: 600; line-height: 1.3; margin-top: 0.45rem; }
 .d-team { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 .d-team span { background: var(--surface); border: 0.1rem solid var(--ink); border-radius: 999px; padding: 0.15rem 0.8rem; font-size: 0.85rem; font-weight: 700; }
 .d-timer { display: inline-flex; align-items: center; gap: 0.8rem; background: var(--surface); border: 0.14rem solid var(--ink); border-radius: 999px; padding: 0.3rem 0.5rem 0.3rem 1.2rem; box-shadow: 0.2rem 0.2rem 0 var(--ink); }

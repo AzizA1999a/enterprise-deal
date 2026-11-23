@@ -11,7 +11,7 @@ window.B2B_CONFIG = {
   subtitle: "A B2B selling simulation",
 
   // The presenting team, in speaking order. Used on the slides ("Lead: ...").
-  team: ["Speaker 1", "Speaker 2", "Speaker 3", "Speaker 4"],
+  team: ["Aziz", "Speaker 2", "Speaker 3", "Speaker 4"],
 
   // Role split and timing.
   sellerShare: 0.6,          // about 60% sellers, 40% buyers
