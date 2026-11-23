@@ -11,8 +11,6 @@ window.B2B_FACTS = {
   size: [
     { n: "$1.47 tn", t: "is what the world will spend on enterprise software in 2026, up 15.5% in one year.",
       src: "Gartner, worldwide IT spending forecast, July 2026." },
-    { n: "660", t: "software applications run in the average company with more than 10,000 employees.",
-      src: "Zylo, SaaS Management Index, 2025. Vendor data from its own customers." },
     { n: "90%", t: "of the leading corporations surveyed already buy from start-ups as a \"venture client\".",
       src: "Mind the Bridge, Jan 2025. Innovation heads at top corporations; sample size not disclosed." }
   ],
@@ -20,9 +18,7 @@ window.B2B_FACTS = {
     { n: "63%", t: "of what enterprises spent on generative-AI applications in 2025 went to start-ups, up from 36% a year earlier.",
       src: "Menlo Ventures, The State of Generative AI in the Enterprise, Dec 2025. Investor source; 495 US decision-makers." },
     { n: "67%", t: "of B2B buyers prefer to buy without a sales rep, up from 61% the year before.",
-      src: "Gartner sales surveys, June 2025 and March 2026." },
-    { n: "71%", t: "of B2B buyers are now Millennials or Gen Z.",
-      src: "Forrester (Hayes), March 2024. Survey data from 2023." }
+      src: "Gartner sales surveys, June 2025 and March 2026." }
   ],
   examples: [
     { name: "Harvey and Allen & Overy", year: "2023", how: "A beta from November 2022: about 3,500 lawyers asked about 40,000 questions before the firm announced the partnership.",
@@ -197,7 +193,6 @@ window.B2B_FACTS = {
     "Gartner. (2026b, July 27). *Gartner forecasts worldwide IT spending to grow 14.2% in 2026, totaling $6.37 trillion* [Press release]. https://www.gartner.com/en/newsroom/press-releases/2026-07-27-gartner-forecasts-worldwide-it-spending-to-grow-14-point-2-percent-in-2026-totaling-6-point-37-trillion",
     "Griffith, E. (2017, June 22). Why are corporations so bad at working with startups? *Fortune*. https://fortune.com/2017/06/22/corporate-innovation-programs",
     "GT Advanced Technologies Inc. (2014). *Form 10-Q for the quarterly period ended June 28, 2014*. U.S. Securities and Exchange Commission. https://www.sec.gov/Archives/edgar/data/0001394954/000144530514003496/gtatq2cy2014-10q.htm",
-    "Hayes, A. (2024, March 25). *Younger generations are shaking up B2B buying - are you prepared?* Forrester. https://www.forrester.com/blogs/younger-b2b-buyers/",
     "Heller, M. (2014, November 12). Glass supplier accuses Apple of \"bait and switch\". *CFO*. https://www.cfo.com/news/glass-supplier-accuses-apple-of-bait-and-switch/664792/",
     "Irvine, P. J., Park, S. S., & Y\u0131ld\u0131zhan, \u00c7. (2016). Customer-base concentration, profitability, and the relationship life cycle. *The Accounting Review, 91*(3), 883-906. https://doi.org/10.2308/accr-51246",
     "Jain, S. (2023, November 1). *SaaS retention report 2023*. ChartMogul. https://chartmogul.com/reports/saas-retention-report/",
@@ -220,6 +215,5 @@ window.B2B_FACTS = {
     "Vanta. (n.d.). *How much does a SOC 2 audit cost?* https://www.vanta.com/collection/soc-2/soc-2-audit-cost",
     "Webster, F. E., Jr., & Wind, Y. (1972). A general model for understanding organizational buying behavior. *Journal of Marketing, 36*(2), 12-19. https://doi.org/10.1177/002224297203600204",
     "Weiblen, T., & Chesbrough, H. W. (2015). Engaging with startups to enhance corporate innovation. *California Management Review, 57*(2), 66-90. https://doi.org/10.1525/cmr.2015.57.2.66",
-    "Zylo. (2025, January 16). *2025 SaaS management index reveals first increase in average SaaS spend in three years* [Press release]. https://zylo.com/news/2025-saas-management-index"
   ]
 };
