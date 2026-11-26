@@ -414,7 +414,8 @@ table.payoff td.num { text-align: right; font-family: var(--display); font-weigh
 .rchart .col.todo .stack { border-style: dashed; background: transparent; }
 .rchart.big .v { font-size: 3.6rem; }
 .rchart.big .t { font-size: 1.3rem; }
-.rchart.small { min-height: 7rem; gap: 0.7rem; }
+.rchart.small { min-height: 5.6rem; gap: 0.7rem; }
+.rchart.small .stack { min-height: 2.6rem; margin: 0.3rem 0; }
 .rchart.small .v { font-size: 1.7rem; }
 .rchart.small .t { font-size: 0.95rem; }
 .rchart.small .t small { font-size: 0.72rem; }
@@ -442,4 +443,5 @@ table.payoff td.num { text-align: right; font-family: var(--display); font-weigh
 .rchart .t { min-height: 2.5em; }
 .rchart .t small { min-height: 2.4em; }
 .rchart.small .t { min-height: 2.9em; }
+.rchart.small + .rkey { margin-top: 0.3rem; font-size: 0.78rem; }
 .phone .badge { margin-bottom: 14px; }
