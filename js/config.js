@@ -13,41 +13,47 @@ window.B2B_CONFIG = {
   team: ["Aziz", "Speaker 2", "Speaker 3", "Speaker 4"],
 
   // ---------------------------------------------------------------- the game
-  // One gamble, three short rounds. A buyer can stay with the supplier they have (safe) or sign a
-  // start-up (a bigger win if it delivers, a bigger loss if it fails). Some start-ups are secretly
-  // not ready. Each round gives the room one more way to tell them apart.
+  // Every player runs a start-up's marketing campaign to get inside one large company ("giant").
+  // A giant is four doors, one person behind each: the manager with the problem, security,
+  // procurement, and the executive who signs. Each round a start-up has a small budget and
+  // spends it on marketing moves. Each move shows its cost and its chance of opening the door
+  // the start-up is standing at. The network is the room: every player knows one person inside
+  // one giant, and can introduce a few classmates to them.
   // Every number here is a game setting, not a measured fact.
-  sellerShare: 0.55,         // about 55% play start-ups, 45% play buyers
-  briefingSeconds: 45,       // time to read the role card before round 1
-  roundSeconds: 120,         // each round: 2 minutes of walking and talking
-  revealSeconds: 45,         // each reveal, before the next round starts by itself
+  briefingSeconds: 60,       // time to read the card and choose a target before round 1
+  roundSeconds: 100,         // each round
+  revealSeconds: 30,         // each reveal, before the next round starts by itself
   extendSeconds: 30,         // the "+30 s" button
 
   game: {
-    lemonShare: 0.34,        // share of start-ups whose product is not ready (they know; buyers do not)
-    proofShare: 0.5,         // share of the ready start-ups that hold proof (a reference customer)
-    introsPerBuyer: 1,       // start-ups each buyer "knows" (used in the round with introductions)
-    // What each round allows. The wording players see is in data/cards.json ("rounds").
-    //   pilot:  buyers may sign a small pilot instead of the full deal
-    //   proof:  a start-up's proof is shown to a buyer who types its deal code
-    //   record: what each start-up did in earlier rounds is shown (its references)
-    //   intros: each buyer sees the truth about the start-ups they "know"
-    rounds: [
-      { pilot: false, proof: false, record: false, intros: false },
-      { pilot: true,  proof: true,  record: false, intros: false },
-      { pilot: true,  proof: true,  record: true,  intros: true }
-    ]
+    rounds: 4,
+    budget: 2,               // marketing budget per round (it does not carry over)
+    startupsPerGiant: 7,     // about this many start-ups per giant; a small class plays with fewer giants
+    slots: 2,                // each giant signs only its first two start-ups
+    vouches: 2,              // classmates each player can introduce to the person they know
+    awareBoost: 10,          // after "content": every later move is this much more likely to work
+    fit: 10,                 // the right message for this giant: this much more likely, at the doors below
+    misfit: 10,              // the wrong message: this much less likely
+    fitDoors: [0, 3],        // the message matters to the manager and to the executive
+    // cost: budget it uses. odds: chance (%) of opening each door, in order
+    // [manager, security, procurement, executive]. once: can be done one time only.
+    moves: {
+      cold:     { cost: 1, odds: [12, 4, 4, 4] },       // an email to someone who has never heard of you
+      content:  { cost: 1, once: true },                 // publish a case study: makes you known inside the giant
+      research: { cost: 1, once: true },                 // find out which message this giant cares about
+      intro:    { cost: 1, odds: 70 },                   // a warm introduction; only for the door your contact sits behind
+      proof:    { cost: 1, odds: [10, 70, 25, 15] },    // a reference customer and a security certificate
+      pilot:    { cost: 2, odds: [25, 15, 15, 60] },    // a small first step the executive can point to
+      partner:  { cost: 2, odds: [15, 15, 75, 15] }     // go in beside a supplier the giant already approved
+    }
   },
 
-  // Points per round. Staying is safe; a blind full deal loses on average; a pilot limits the damage.
-  payoff: {
-    stay: 1,                 // buyer: stayed with the current supplier
-    fullWin: 4,              // buyer: full deal, the start-up delivered
-    fullLose: -6,            // buyer: full deal, the start-up failed
-    pilotWin: 2,             // buyer: pilot, the start-up delivered
-    pilotLose: -1,           // buyer: pilot, the start-up failed
-    sellerFull: 3,           // start-up: a full deal signed
-    sellerPilot: 1           // start-up: a pilot signed
+  // Points.
+  points: {
+    door: 1,                 // each door opened
+    win: 6,                  // signed, among the giant's first start-ups
+    late: 2,                 // reached the executive's signature after the giant's slots were taken
+    vouch: 2                 // for each classmate you introduced who went on to sign
   },
 
   // An optional short clip for the slides. Leave url empty and nothing shows.
@@ -55,7 +61,7 @@ window.B2B_CONFIG = {
   // url: a YouTube link (watch, youtu.be or embed) or a direct .mp4 file.
   // start / end: seconds into the clip; 0 = from the beginning / to the end.
   // src: the source note shown under the clip (the brief asks for one on every slide with outside material).
-  video: { url: "", start: 0, end: 0, title: "", src: "", slide: 8 },
+  video: { url: "", start: 0, end: 0, title: "", src: "", slide: 9 },
 
   // How often phones and screens ask the server for news (milliseconds).
   pollMs: { market: 1500, idle: 3000 }

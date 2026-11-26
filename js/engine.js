@@ -1,11 +1,12 @@
-/* Game rules: who plays what, what each round allows, and how a round is scored.
+/* Game rules: role cards, what a marketing move is worth, and the score.
    Pure functions with no network or page access, so the same code runs on the
    host laptop, on phones and in the offline demo.
 
-   The game in one paragraph: buyers can stay with the supplier they have (safe) or sign a
-   start-up (more to win, more to lose). Some start-ups are secretly not ready and will fail.
-   Each round gives the room one more way to tell them apart: proof and pilots, then
-   references and introductions. */
+   The game in one paragraph: every player runs a start-up's marketing campaign to get inside
+   one large company (a "giant"). A giant is four doors with one person behind each. Each round a
+   start-up spends a small budget on moves; each move has a cost and a chance of opening the door
+   the start-up is standing at. Every player also knows one person inside one giant, and can
+   introduce a few classmates to them: the network is the room. */
 (function (root) {
   "use strict";
   var B2B = (root.B2B = root.B2B || {});
@@ -32,180 +33,142 @@
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
   var ROMAN = ["", "", " II", " III", " IV", " V", " VI"];
+  var DOORS = 4;
+  var MESSAGES = ["cost", "risk", "speed"];
 
   // ---------- card file checks ----------
   function validateCards(cards) {
     var problems = [];
-    if (!cards || !Array.isArray(cards.sellers) || !Array.isArray(cards.buyers)) return ["cards.json must contain sellers and buyers."];
-    if (!cards.sellers.length) problems.push("cards.json has no seller cards.");
-    if (!cards.buyers.length) problems.push("cards.json has no buyer cards.");
-    cards.sellers.forEach(function (s) { if (!s.id || !s.name || !s.tagline) problems.push("A seller card needs id, name and tagline: " + JSON.stringify(s.id || s.name || "?")); });
-    cards.buyers.forEach(function (b) { if (!b.id || !b.enterprise || !b.title) problems.push("A buyer card needs id, enterprise and title: " + JSON.stringify(b.id || b.enterprise || "?")); });
-    if (!Array.isArray(cards.rounds) || !cards.rounds.length) problems.push('cards.json needs "rounds": the wording for each round.');
+    if (!cards || !Array.isArray(cards.sellers) || !Array.isArray(cards.giants)) return ["cards.json must contain sellers (the start-ups) and giants."];
+    if (!cards.sellers.length) problems.push("cards.json has no start-up cards.");
+    if (!cards.giants.length) problems.push("cards.json has no giants.");
+    cards.sellers.forEach(function (s) { if (!s.id || !s.name || !s.tagline) problems.push("A start-up card needs id, name and tagline: " + JSON.stringify(s.id || s.name || "?")); });
+    cards.giants.forEach(function (g) {
+      if (!g.id || !g.name) problems.push("A giant needs id and name: " + JSON.stringify(g.id || g.name || "?"));
+      if (!Array.isArray(g.people) || g.people.length !== DOORS) problems.push("Giant " + (g.id || "?") + " needs " + DOORS + " people, in door order.");
+    });
+    if (!Array.isArray(cards.doors) || cards.doors.length !== DOORS) problems.push('cards.json needs "doors": ' + DOORS + " short labels.");
+    MESSAGES.forEach(function (m) { if (!cards.messages || !cards.messages[m]) problems.push('cards.json "messages" needs "' + m + '".'); });
     return problems;
   }
 
-  // ---------- the rounds ----------
-  function roundCount(cfg) { return cfg.game.rounds.length; }
-  // What round `r` (1-based) allows.
-  function roundRule(cfg, r) { return cfg.game.rounds[clamp(r, 1, roundCount(cfg)) - 1]; }
-  // What the database has to know to referee: how many rounds, and from which round a pilot may be signed and proof is shown.
-  function serverRules(cfg) {
-    var pilot = 0, proof = 0;
-    cfg.game.rounds.forEach(function (x, i) { if (x.pilot && !pilot) pilot = i + 1; if (x.proof && !proof) proof = i + 1; });
-    return { rounds: roundCount(cfg), pilotFrom: pilot || 99, proofFrom: proof || 99 };
+  // ---------- the set-up of one game ----------
+  // How many giants a class of this size plays with, so each one is contested.
+  function giantsInPlay(nPlayers, cards, cfg) {
+    var n = clamp(Math.round(nPlayers / (cfg.game.startupsPerGiant || 7)), nPlayers >= 6 ? 2 : 1, cards.giants.length);
+    return cards.giants.slice(0, n).map(function (g) { return g.id; });
   }
-  // Rounds whose results everybody may see.
+  // Everything the referee (the database, or the offline store) needs: the settings, and for this game which
+  // message each giant cares about. Drawn at random every game, so no file gives it away.
+  function makeRules(nPlayers, cards, cfg, rnd) {
+    rnd = rnd || makeRng();
+    var G = cfg.game, giants = {};
+    giantsInPlay(nPlayers, cards, cfg).forEach(function (id) { giants[id] = { priority: pick(MESSAGES, rnd) }; });
+    return { rounds: G.rounds, budget: G.budget, slots: G.slots, vouches: G.vouches, awareBoost: G.awareBoost,
+             fit: G.fit, misfit: G.misfit, fitDoors: G.fitDoors.slice(), moves: clone(G.moves), giants: giants };
+  }
+  // Rounds whose results are in.
   function closedRounds(game) {
     if (!game) return 0;
     if (game.phase === "open") return Math.max(0, (game.round || 0) - 1);
     if (game.phase === "reveal" || game.phase === "locked") return game.round || 0;
     return 0;
   }
+  function newState() { return { giant: null, message: null, progress: 0, aware: false, researched: false, self_used: false, spent: {}, rank: null, signed_round: null, vouched: 0 }; }
 
-  // ---------- assignment ----------
-  function makeCtx(assigned, cards, cfg, rnd) {
-    var ctx = { cards: cards, cfg: cfg, rnd: rnd, players: [], used: {}, codes: {}, dirty: {} };
-    (assigned || []).forEach(function (p) {
-      var w = { id: p.id, name: p.name, role: p.role, card: clone(p.card) };
-      ctx.players.push(w);
-      if (w.card && w.card.code) ctx.codes[w.card.code] = true;
-      if (w.card && w.card.templateId) ctx.used[w.card.templateId] = (ctx.used[w.card.templateId] || 0) + 1;
-    });
-    return ctx;
-  }
-
-  // Give a player a role card. `kind` for a seller: { ready, proof }.
-  function place(ctx, p, role, kind) {
-    var pool = role === "seller" ? ctx.cards.sellers : ctx.cards.buyers;
+  // ---------- role cards ----------
+  function deal(ctx, p) {
+    var pool = ctx.cards.sellers;
     var least = Math.min.apply(null, pool.map(function (t) { return ctx.used[t.id] || 0; }));
     var t = pick(pool.filter(function (x) { return (ctx.used[x.id] || 0) === least; }), ctx.rnd);
     var uses = (ctx.used[t.id] = (ctx.used[t.id] || 0) + 1);
-    var suffix = ROMAN[uses] != null ? ROMAN[uses] : " " + uses;
-    var card, pub;
-    if (role === "seller") {
-      // A two-digit deal code. A buyer has to hear it from the seller, so deals are made face to face.
-      var code;
-      do { code = String(10 + Math.floor(ctx.rnd() * 90)); } while (ctx.codes[code] && Object.keys(ctx.codes).length < 90);
-      ctx.codes[code] = true;
-      card = { role: "seller", templateId: t.id, org: t.name + suffix, tagline: t.tagline, ready: !!kind.ready, proof: !!(kind.ready && kind.proof), code: code };
-      pub = { org: card.org, tagline: card.tagline };
-    } else {
-      card = { role: "buyer", templateId: t.id, org: t.enterprise + suffix, title: t.title, need: t.need || "",
-               incumbent: (t.incumbent && t.incumbent.name) || "your current supplier", knows: [] };
-      pub = { org: card.org, title: card.title };
-    }
-    var w = { id: p.id, name: p.name, role: role, card: card, pub: pub, isNew: true };
-    ctx.players.push(w);
-    return w;
+    // A two-digit code. A classmate types it to introduce this start-up to the person they know.
+    var code;
+    do { code = String(10 + Math.floor(ctx.rnd() * 90)); } while (ctx.codes[code] && Object.keys(ctx.codes).length < 90);
+    ctx.codes[code] = true;
+    // The person this player knows: spread evenly over every door of every giant in play.
+    if (!ctx.queue.length) ctx.queue = shuffle(ctx.slots, ctx.rnd);
+    var slot = ctx.queue.pop(), giant = ctx.byId[slot.giant], who = giant.people[slot.door];
+    var card = { templateId: t.id, org: t.name + (ROMAN[uses] != null ? ROMAN[uses] : " " + uses), tagline: t.tagline, code: code,
+                 contact: { giant: giant.id, giantName: giant.name, door: slot.door, name: who.name, title: who.title },
+                 hint: ctx.rules.giants[giant.id].priority };     // they also know what that giant cares about
+    return { id: p.id, role: "startup", card: card, pub: { org: card.org, tagline: card.tagline } };
   }
-
-  // A buyer "knows" a few start-ups: in the round with introductions they see whether each one is ready.
-  function introduce(ctx, buyer, seller) {
-    if (buyer.card.knows.some(function (k) { return k.id === seller.id; })) return false;
-    buyer.card.knows.push({ id: seller.id, name: seller.name, org: seller.card.org, ready: seller.card.ready });
-    ctx.dirty[buyer.id] = true;
-    return true;
-  }
-
-  function toPatch(ctx) {
-    var out = [];
-    ctx.players.forEach(function (w) {
-      if (w.isNew) out.push({ id: w.id, role: w.role, card: w.card, pub: w.pub });
-      else if (ctx.dirty[w.id]) out.push({ id: w.id, card: w.card });
+  function makeCtx(assigned, cards, rules, rnd) {
+    var ids = Object.keys(rules.giants), ctx = { cards: cards, rules: rules, rnd: rnd, used: {}, codes: {}, byId: {}, slots: [], queue: [] };
+    cards.giants.forEach(function (g) { ctx.byId[g.id] = g; });
+    ids.forEach(function (id) { for (var d = 0; d < DOORS; d++) ctx.slots.push({ giant: id, door: d }); });
+    var taken = {};
+    (assigned || []).forEach(function (p) {
+      var c = p.card || {};
+      if (c.code) ctx.codes[c.code] = true;
+      if (c.templateId) ctx.used[c.templateId] = (ctx.used[c.templateId] || 0) + 1;
+      if (c.contact) taken[c.contact.giant + ":" + c.contact.door] = (taken[c.contact.giant + ":" + c.contact.door] || 0) + 1;
     });
-    return { players: out };
+    // late joiners first fill the doors that the fewest players know
+    if (assigned && assigned.length) {
+      ctx.queue = shuffle(ctx.slots, rnd).sort(function (a, b) { return (taken[b.giant + ":" + b.door] || 0) - (taken[a.giant + ":" + a.door] || 0); });
+    }
+    return ctx;
   }
-
-  // First assignment, when the host presses Start. `players` = [{id, name}].
-  function assign(players, cards, cfg, rnd) {
+  // First deal, when the host presses Start. `players` = [{id, name}]. Returns a patch.
+  function assign(players, cards, rules, rnd) {
     rnd = rnd || makeRng();
-    var G = cfg.game, ctx = makeCtx([], cards, cfg, rnd);
-    var order = shuffle(players, rnd), n = order.length;
-    var nS = Math.round(n * cfg.sellerShare);
-    if (n >= 2) nS = clamp(nS, 1, n - 1);
-    // Fixed numbers of each kind, so every game has start-ups that are not ready and start-ups with proof.
-    var nLemon = nS >= 2 ? clamp(Math.round(nS * G.lemonShare), 1, nS - 1) : 0;
-    var nReady = nS - nLemon;
-    var nProof = nReady >= 2 ? clamp(Math.round(nReady * G.proofShare), 1, nReady - 1) : 0;
-    var sellers = order.slice(0, nS).map(function (p, i) {
-      return place(ctx, p, "seller", { ready: i >= nLemon, proof: i >= nLemon && i < nLemon + nProof });
-    });
-    var buyers = order.slice(nS).map(function (p) { return place(ctx, p, "buyer"); });
-    // Introductions, spread evenly: every start-up is known by about the same number of buyers.
-    var queue = shuffle(sellers, rnd), q = 0;
-    for (var k = 0; k < (G.introsPerBuyer || 0); k++) {
-      shuffle(buyers, rnd).forEach(function (b) {
-        for (var tries = 0; tries < queue.length; tries++) {
-          var s = queue[q % queue.length]; q++;
-          if (introduce(ctx, b, s)) break;
-        }
-      });
-    }
-    return toPatch(ctx);
+    var ctx = makeCtx([], cards, rules, rnd);
+    return { players: shuffle(players, rnd).map(function (p) { return deal(ctx, p); }) };
   }
-
-  // Late joiners. `assigned` = players that already hold a role (with cards).
-  function assignLate(newcomers, assigned, cards, cfg, rnd) {
+  // Late joiners. `assigned` = players that already hold a card.
+  function assignLate(newcomers, assigned, cards, rules, rnd) {
     rnd = rnd || makeRng();
-    var G = cfg.game, ctx = makeCtx(assigned, cards, cfg, rnd);
-    newcomers.forEach(function (p) {
-      var sellers = ctx.players.filter(function (x) { return x.role === "seller"; });
-      var nS = sellers.length, nB = ctx.players.length - nS, n = ctx.players.length + 1;
-      var role = Math.abs((nS + 1) / n - cfg.sellerShare) <= Math.abs(nS / n - cfg.sellerShare) ? "seller" : "buyer";
-      if (nB === 0) role = "buyer"; else if (nS === 0) role = "seller";
-      if (role === "seller") {
-        var lemons = sellers.filter(function (x) { return !x.card.ready; }).length;
-        var ready = lemons / (nS + 1) >= G.lemonShare;
-        var readies = nS - lemons, proofs = sellers.filter(function (x) { return x.card.proof; }).length;
-        place(ctx, p, "seller", { ready: ready, proof: ready && proofs / (readies + 1) < G.proofShare });
-      } else {
-        var w = place(ctx, p, "buyer");
-        shuffle(sellers, rnd).slice(0, G.introsPerBuyer || 0).forEach(function (s) { introduce(ctx, w, s); });
-      }
-    });
-    return toPatch(ctx);
+    var ctx = makeCtx(assigned, cards, rules, rnd);
+    return { players: newcomers.map(function (p) { return deal(ctx, p); }) };
   }
 
-  // ---------- scoring ----------
-  // A "row" is one buyer's decision in one round: { round, buyer_id, seller_id, kind: "full"|"pilot"|"stay", delivered }.
-  // A buyer with no row in a closed round stayed with their supplier by default.
-  function buyerRound(row, cfg) {
-    var P = cfg.payoff;
-    if (!row || row.kind === "stay") return P.stay;
-    if (row.kind === "pilot") return row.delivered ? P.pilotWin : P.pilotLose;
-    return row.delivered ? P.fullWin : P.fullLose;
+  // ---------- what a move is worth ----------
+  // The chance (%) that `move` opens door `door`, before the message is counted. null: this move opens no door.
+  function baseOdds(rules, move, door, aware) {
+    var m = rules.moves[move];
+    if (!m || m.odds == null) return null;
+    if (move === "intro") return m.odds;                                   // an introduction is worth the same to anyone
+    return clamp((Array.isArray(m.odds) ? m.odds[door] : m.odds) + (aware ? rules.awareBoost : 0), 2, 95);
   }
-  function sellerRound(row, cfg) {
-    var P = cfg.payoff;
-    return !row ? 0 : row.kind === "pilot" ? P.sellerPilot : P.sellerFull;
+  // What the start-up's message adds or takes away at this door.
+  function fitShift(rules, move, door, message, priority) {
+    if (move === "intro" || rules.fitDoors.indexOf(door) < 0 || !message || !priority) return 0;
+    return message === priority ? rules.fit : -rules.misfit;
   }
-  function rowOf(player, deals, round) {
-    return deals.filter(function (d) {
-      return d.round === round && (player.role === "seller" ? d.seller_id === player.id : d.buyer_id === player.id);
-    })[0] || null;
+  function odds(rules, move, door, state, priority) {
+    var base = baseOdds(rules, move, door, state.aware);
+    return base == null ? null : move === "intro" ? base : clamp(base + fitShift(rules, move, door, state.message, priority), 2, 95);
   }
-  // Points for rounds 1..upTo. Returns { total, rounds: [{ round, row, points }] }.
-  function score(player, deals, upTo, cfg) {
-    var out = { total: 0, rounds: [] };
-    for (var r = 1; r <= upTo; r++) {
-      var row = rowOf(player, deals, r);
-      var pts = player.role === "seller" ? sellerRound(row, cfg) : buyerRound(row, cfg);
-      out.rounds.push({ round: r, row: row, points: pts });
-      out.total += pts;
-    }
-    return out;
-  }
-  // What a start-up did in the rounds already closed: its references, and its failures.
-  function record(sellerId, deals, upTo) {
-    var mine = deals.filter(function (d) { return d.seller_id === sellerId && d.round <= upTo && d.kind !== "stay"; });
-    return { delivered: mine.filter(function (d) { return d.delivered; }), failed: mine.filter(function (d) { return !d.delivered; }) };
+  function spentIn(state, round) { return (state.spent && state.spent[round]) || 0; }
+  function budgetLeft(rules, state, round) { return rules.budget - spentIn(state, round); }
+  // Does this player know which message their target cares about?
+  function knowsPriority(card, state) { return !!(state.researched || (card.contact && state.giant && card.contact.giant === state.giant)); }
+
+  // ---------- the score ----------
+  // intros: [{from_id, to_id}] ; players: every player row (with state).
+  function score(player, players, intros, cfg, slots) {
+    var P = cfg.points, st = player.state || newState(), parts = [];
+    if (st.progress) parts.push({ label: st.progress + (st.progress === 1 ? " door opened" : " doors opened"), value: st.progress * P.door });
+    if (st.rank != null) parts.push(st.rank <= slots ? { label: "Signed, among the first " + slots, value: P.win } : { label: "Got the signature, but too late", value: P.late });
+    var byId = {};
+    players.forEach(function (p) { byId[p.id] = p; });
+    var helped = {};
+    (intros || []).forEach(function (i) {
+      var to = byId[i.to_id];
+      if (i.from_id === player.id && to && to.state && to.state.rank != null) helped[i.to_id] = true;
+    });
+    var n = Object.keys(helped).length;
+    if (n) parts.push({ label: n + (n === 1 ? " start-up you introduced signed" : " start-ups you introduced signed"), value: n * P.vouch });
+    return { total: parts.reduce(function (s, x) { return s + x.value; }, 0), parts: parts };
   }
 
   B2B.engine = {
+    DOORS: DOORS, MESSAGES: MESSAGES,
     makeRng: makeRng, shuffle: shuffle, pick: pick, clone: clone, clamp: clamp,
-    validateCards: validateCards, assign: assign, assignLate: assignLate,
-    roundCount: roundCount, roundRule: roundRule, serverRules: serverRules, closedRounds: closedRounds,
-    buyerRound: buyerRound, sellerRound: sellerRound, rowOf: rowOf, score: score, record: record
+    validateCards: validateCards, giantsInPlay: giantsInPlay, makeRules: makeRules, closedRounds: closedRounds, newState: newState,
+    assign: assign, assignLate: assignLate,
+    baseOdds: baseOdds, fitShift: fitShift, odds: odds, spentIn: spentIn, budgetLeft: budgetLeft, knowsPriority: knowsPriority, score: score
   };
 })(typeof window !== "undefined" ? window : globalThis);

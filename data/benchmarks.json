@@ -1,41 +1,71 @@
 {
   "_readme": "Real-world benchmarks shown under a result panel. Fill in value (one short line), source (the citation) and url. Leave value empty to show an empty slot. Nothing here is filled in automatically, and nothing should be: only add a number you have checked at its source.",
-  "rounds_signed": {
+  "funnel": {
     "value": "",
     "source": "",
     "url": ""
   },
-  "stayed_round1": {
+  "moves": {
     "value": "",
     "source": "",
     "url": ""
   },
-  "burned": {
+  "cold": {
     "value": "",
     "source": "",
     "url": ""
   },
-  "tell_apart": {
+  "network": {
     "value": "",
     "source": "",
     "url": ""
   },
-  "proof": {
+  "content": {
     "value": "",
     "source": "",
     "url": ""
   },
-  "pilot": {
+  "message": {
     "value": "",
     "source": "",
     "url": ""
   },
-  "trust": {
+  "targeting": {
     "value": "",
     "source": "",
     "url": ""
   },
-  "not_ready": {
+  "stuck": {
+    "value": "",
+    "source": "",
+    "url": ""
+  },
+  "winners": {
+    "value": "",
+    "source": "",
+    "url": ""
+  },
+  "giants": {
+    "value": "",
+    "source": "",
+    "url": ""
+  },
+  "door_manager": {
+    "value": "",
+    "source": "",
+    "url": ""
+  },
+  "door_security": {
+    "value": "",
+    "source": "",
+    "url": ""
+  },
+  "door_procurement": {
+    "value": "",
+    "source": "",
+    "url": ""
+  },
+  "door_executive": {
     "value": "",
     "source": "",
     "url": ""

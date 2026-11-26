@@ -123,7 +123,7 @@
     var html = "";
     if (!D.code || D.pub === null) html = b("create", "Create game", true);
     else if (!has) html = "<span>Game " + esc(D.code) + " · controls are on the host panel</span>";
-    else if (p === "lobby") html = b("start", "Start: deal the role cards", true) + b("bots", "+24 simulated players") +
+    else if (p === "lobby") html = b("start", "Start: deal the start-up cards", true) + b("bots", "+24 simulated players") +
       (D.pub.players.some(function (x) { return x.is_bot; }) ? b("speed", "Test speed " + B2B.speed.chosen(D.code) + "×") : "");
     else if (p === "briefing") html = b("open", "Start round 1 now", true);
     else if (p === "open") html = b("extend", "+" + cfg.extendSeconds + " s") + b("close", "Close the round");
@@ -135,7 +135,7 @@
 
   function renderLive() {
     var s = slides[D.i], pub = D.pub;
-    var key = JSON.stringify(pub ? [pub.game, pub.players, pub.closed, pub.decided_now, pub.signed_now, !!pub.full] : pub) + D.code;
+    var key = JSON.stringify(pub ? [pub.game, pub.players, pub.moves.length, pub.intros.length, !!pub.full] : pub) + D.code;
     var kind = s.getAttribute("data-live");
     if (kind) setHtml(s.querySelector(".body"), kind + key, liveHtml(kind));
     Array.prototype.forEach.call(s.querySelectorAll("[data-panel]"), function (el) {

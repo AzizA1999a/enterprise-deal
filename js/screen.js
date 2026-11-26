@@ -25,7 +25,7 @@
 
   function render() {
     var pub = S.pub;
-    var key = JSON.stringify(pub ? [pub.game, pub.players, pub.closed, pub.decided_now, pub.signed_now, !!pub.full] : pub);
+    var key = JSON.stringify(pub ? [pub.game, pub.players, pub.moves.length, pub.intros.length, !!pub.full] : pub);
     if (key === S.key) return;
     S.key = key;
     var bots = pub ? pub.players.filter(function (p) { return p.is_bot; }).length : 0;

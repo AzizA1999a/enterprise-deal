@@ -1,156 +1,124 @@
-/* Results and CSV export. Everything is computed from the raw players and decisions
+/* Results and CSV export. Everything is computed from the raw players, moves and introductions
    of one game; nothing here is estimated or invented. */
 (function (root) {
   "use strict";
   var B2B = (root.B2B = root.B2B || {});
+  var DOOR_MOVES = ["cold", "intro", "proof", "pilot", "partner"];     // the moves that try to open a door
 
   function rate(won, n) { return { won: won, n: n, pct: n ? (won / n) * 100 : null }; }
+  function rateOf(list) { return rate(list.filter(function (m) { return m.success; }).length, list.length); }
   function avg(nums) { return nums.length ? nums.reduce(function (a, b) { return a + b; }, 0) / nums.length : null; }
+  function tries(moves) { return moves.filter(function (m) { return m.success != null; }); }
 
-  // full = { players: [rows with cards], deals: [every decision of every round] }
-  function compute(full, cards) {
-    var cfg = root.B2B_CONFIG, E = B2B.engine;
-    var players = full.players.filter(function (p) { return p.role; });
-    var sellers = players.filter(function (p) { return p.role === "seller"; });
-    var buyers = players.filter(function (p) { return p.role === "buyer"; });
-    var byId = {};
-    players.forEach(function (p) { byId[p.id] = p; });
-    var deals = full.deals.filter(function (d) { return d.kind !== "stay" && byId[d.seller_id] && byId[d.buyer_id]; });
-    var N = Math.max(E.roundCount(cfg), full.deals.reduce(function (m, d) { return Math.max(m, d.round); }, 0));
-    function ruleOf(r) { return E.roundRule(cfg, r); }
-    function label(r) { return ((cards && cards.rounds && cards.rounds[r - 1]) || {}).title || "Round " + r; }
-    function line(d) {
-      var b = byId[d.buyer_id], s = byId[d.seller_id];
-      return { round: d.round, kind: d.kind, delivered: d.delivered, buyer: b.name, buyerOrg: b.card.org, seller: s.name, sellerOrg: s.card.org };
-    }
-
-    // --- round by round ---
-    var rounds = [];
-    for (var r = 1; r <= N; r++) {
-      var rows = deals.filter(function (d) { return d.round === r; });
-      rounds.push({
-        round: r, title: label(r), buyers: buyers.length, signed: rows.length,
-        full: rows.filter(function (d) { return d.kind === "full"; }).length,
-        pilot: rows.filter(function (d) { return d.kind === "pilot"; }).length,
-        stayed: buyers.length - rows.length,
-        burned: rows.filter(function (d) { return !d.delivered; }).length,
-        toNotReady: rows.filter(function (d) { return !byId[d.seller_id].card.ready; }).length,
-        pct: buyers.length ? (rows.length / buyers.length) * 100 : null,
-        burnedList: rows.filter(function (d) { return !d.delivered; }).map(line),
-        servedList: rows.filter(function (d) { return d.delivered; }).map(line)
-      });
-    }
-
-    // --- could buyers tell a ready start-up from one that is not? ---
-    var notReady = sellers.filter(function (s) { return !s.card.ready; });
-    var tell = {
-      share: sellers.length ? (notReady.length / sellers.length) * 100 : null, notReady: notReady.length, sellers: sellers.length,
-      rounds: rounds.map(function (x) { return { round: x.round, title: x.title, rate: rate(x.toNotReady, x.signed) }; })
-    };
-
-    // --- proof: how often was each kind of start-up signed, in the rounds where proof is shown? ---
-    var proofRounds = [], pilotRounds = [], introRounds = [], recordRounds = [];
-    for (var q = 1; q <= N; q++) {
-      if (ruleOf(q).proof) proofRounds.push(q);
-      if (ruleOf(q).pilot) pilotRounds.push(q);
-      if (ruleOf(q).intros) introRounds.push(q);
-      if (ruleOf(q).record) recordRounds.push(q);
-    }
-    function sellerRounds(group, rs) {
-      var won = 0;
-      group.forEach(function (s) { rs.forEach(function (x) { if (deals.some(function (d) { return d.round === x && d.seller_id === s.id; })) won++; }); });
-      return rate(won, group.length * rs.length);
-    }
-    var holders = sellers.filter(function (s) { return s.card.proof; });
-    var readyNoProof = sellers.filter(function (s) { return s.card.ready && !s.card.proof; });
-    var proof = {
-      rounds: proofRounds,
-      bars: [
-        { key: "proof", label: "Start-ups with proof", rate: sellerRounds(holders, proofRounds) },
-        { key: "ready", label: "Ready, but no proof", rate: sellerRounds(readyNoProof, proofRounds) },
-        { key: "not", label: "Not ready", rate: sellerRounds(notReady, proofRounds) }
-      ],
-      before: sellerRounds(sellers, [1].filter(function (x) { return proofRounds.indexOf(x) < 0; }))
-    };
-
-    // --- pilots: who was offered the small first step, and what did it save? ---
-    var inPilot = deals.filter(function (d) { return pilotRounds.indexOf(d.round) >= 0; });
-    function pilotShare(list) { return rate(list.filter(function (d) { return d.kind === "pilot"; }).length, list.length); }
-    var failedPilots = inPilot.filter(function (d) { return d.kind === "pilot" && !d.delivered; }).length;
-    var pilot = {
-      rounds: pilotRounds,
-      bars: [
-        { key: "unproven", label: "Deals with a start-up that had no proof", rate: pilotShare(inPilot.filter(function (d) { return !byId[d.seller_id].card.proof; })) },
-        { key: "proven", label: "Deals with a start-up that had proof", rate: pilotShare(inPilot.filter(function (d) { return byId[d.seller_id].card.proof; })) }
-      ],
-      pilots: inPilot.filter(function (d) { return d.kind === "pilot"; }).length, failedPilots: failedPilots,
-      saved: failedPilots * (cfg.payoff.pilotLose - cfg.payoff.fullLose)
-    };
-
-    // --- trust: did an introduction change what a buyer did? ---
-    var introduced = buyers.filter(function (b) { return (b.card.knows || []).some(function (k) { return k.ready; }); });
-    var others = buyers.filter(function (b) { return introduced.indexOf(b) < 0; });
-    function signedIn(group, rs) {
-      var won = 0;
-      group.forEach(function (b) { rs.forEach(function (x) { if (deals.some(function (d) { return d.round === x && d.buyer_id === b.id; })) won++; }); });
-      return rate(won, group.length * rs.length);
-    }
-    var inIntro = deals.filter(function (d) { return introRounds.indexOf(d.round) >= 0; });
-    function knew(d, ready) { return (byId[d.buyer_id].card.knows || []).some(function (k) { return k.id === d.seller_id && k.ready === ready; }); }
-    var inRecord = deals.filter(function (d) { return recordRounds.indexOf(d.round) >= 0; });
-    var trust = {
-      rounds: introRounds,
-      bars: [
-        { key: "intro", label: "Buyers who knew a start-up that works", rate: signedIn(introduced, introRounds) },
-        { key: "none", label: "Buyers with no such introduction", rate: signedIn(others, introRounds) }
-      ],
-      viaIntro: inIntro.filter(function (d) { return knew(d, true); }).length, dealsInIntro: inIntro.length,
-      warnedAndSigned: inIntro.filter(function (d) { return knew(d, false); }).length,
-      toReferenced: inRecord.filter(function (d) { return E.record(d.seller_id, deals, d.round - 1).delivered.length > 0; }).length, dealsInRecord: inRecord.length
-    };
-
-    // --- points ---
-    function total(p) { return E.score(p, full.deals, N, cfg).total; }
-    function board(list) {
-      return list.map(function (p) { return { name: p.name, org: p.card.org, points: total(p), ready: p.role === "seller" ? p.card.ready : null, is_bot: p.is_bot }; })
-        .sort(function (a, b) { return b.points - a.points || a.name.localeCompare(b.name); });
-    }
-    var points = {
-      buyers: board(buyers), sellers: board(sellers),
-      alwaysStay: N * cfg.payoff.stay,
-      avgReady: avg(sellers.filter(function (s) { return s.card.ready; }).map(total)),
-      avgNotReady: avg(notReady.map(total)),
-      avgBuyer: avg(buyers.map(total))
-    };
-
-    var allBurned = [];
-    rounds.forEach(function (x) { allBurned = allBurned.concat(x.burnedList); });
-    return {
-      simulated: full.players.filter(function (p) { return p.is_bot; }).length,
-      counts: { players: players.length, sellers: sellers.length, buyers: buyers.length, deals: deals.length, rounds: N,
-                notReady: notReady.length, withProof: holders.length },
-      rounds: rounds, tell: tell, proof: proof, pilot: pilot, trust: trust, points: points, burned: allBurned
-    };
+  // How far the room has got: how many start-ups have opened each door. Works on public data.
+  // players: [{giant, progress, rank}]
+  function funnel(players, slots) {
+    var inGame = players.filter(function (p) { return p.giant; }), E = B2B.engine, opened = [];
+    for (var d = 0; d < E.DOORS; d++) opened.push(inGame.filter(function (p) { return p.progress > d; }).length);
+    return { startups: players.filter(function (p) { return p.role; }).length, targeting: inGame.length, opened: opened,
+             signed: opened[E.DOORS - 1], winners: inGame.filter(function (p) { return p.rank != null && p.rank <= slots; }).length };
+  }
+  // The same, giant by giant.
+  function byGiant(players, ids, cards, slots) {
+    var names = {};
+    (cards.giants || []).forEach(function (g) { names[g.id] = g; });
+    return ids.map(function (id) {
+      var mine = players.filter(function (p) { return p.giant === id; }), f = funnel(mine, slots);
+      var signed = mine.filter(function (p) { return p.rank != null; }).sort(function (a, b) { return a.rank - b.rank; });
+      return { id: id, name: (names[id] || {}).name || id, need: (names[id] || {}).need || "", startups: mine.length, opened: f.opened,
+               at: [0, 1, 2, 3].map(function (d) { return mine.filter(function (p) { return p.progress === d; }).length; }),
+               winners: signed.filter(function (p) { return p.rank <= slots; }).map(function (p) { return { name: p.name, org: p.org }; }),
+               late: signed.filter(function (p) { return p.rank > slots; }).length };
+    });
+  }
+  // How often each kind of move opened a door. `round` limits it to one round; `door` to one door.
+  function moveRates(moves, round, door) {
+    var list = tries(moves).filter(function (m) { return (round == null || m.round === round) && (door == null || m.door === door); });
+    return DOOR_MOVES.map(function (k) { return { key: k, rate: rateOf(list.filter(function (m) { return m.move === k; })) }; });
   }
 
-  // The same round-by-round numbers from public data alone (no role cards), for the reveal after each round.
-  // players: [{id, name, role, org}], closed: decisions of the rounds already closed.
-  function liveRounds(players, closed, upTo, cards) {
+  // full = { players: [rows with card and state], moves, intros, rules }
+  function compute(full, cards) {
+    var cfg = root.B2B_CONFIG, E = B2B.engine, R = full.rules || {};
+    var slots = R.slots || cfg.game.slots, ids = Object.keys(R.giants || {});
+    var startups = full.players.filter(function (p) { return p.role; });
     var byId = {};
-    players.forEach(function (p) { byId[p.id] = p; });
-    var nB = players.filter(function (p) { return p.role === "buyer"; }).length, out = [];
-    for (var r = 1; r <= upTo; r++) {
-      var rows = closed.filter(function (d) { return d.round === r && d.kind !== "stay" && byId[d.seller_id] && byId[d.buyer_id]; });
-      var line = function (d) {
-        return { round: d.round, kind: d.kind, delivered: d.delivered, buyer: byId[d.buyer_id].name, buyerOrg: byId[d.buyer_id].org,
-                 seller: byId[d.seller_id].name, sellerOrg: byId[d.seller_id].org };
-      };
-      out.push({ round: r, title: ((cards && cards.rounds && cards.rounds[r - 1]) || {}).title || "Round " + r, buyers: nB, signed: rows.length,
-                 stayed: nB - rows.length, pilot: rows.filter(function (d) { return d.kind === "pilot"; }).length,
-                 burned: rows.filter(function (d) { return !d.delivered; }).length, pct: nB ? (rows.length / nB) * 100 : null,
-                 burnedList: rows.filter(function (d) { return !d.delivered; }).map(line), servedList: rows.filter(function (d) { return d.delivered; }).map(line) });
+    startups.forEach(function (p) { byId[p.id] = p; });
+    var pub = startups.map(function (p) { return { id: p.id, name: p.name, org: p.card.org, role: p.role, giant: p.state.giant, progress: p.state.progress, rank: p.state.rank }; });
+    var moves = full.moves.filter(function (m) { return byId[m.player_id]; });
+    var intros = full.intros || [];
+    function mine(p) { return moves.filter(function (m) { return m.player_id === p.id; }); }
+    function group(list) {
+      return { n: list.length, doors: avg(list.map(function (p) { return p.state.progress; })),
+               signed: rate(list.filter(function (p) { return p.state.rank != null; }).length, list.length) };
     }
-    return out;
+    function split(test) { return { yes: group(startups.filter(test)), no: group(startups.filter(function (p) { return !test(p); })) }; }
+
+    // --- the network ---
+    var usedIntro = function (p) { return mine(p).some(function (m) { return m.move === "intro"; }); };
+    var network = {
+      given: intros.length, used: intros.filter(function (i) { return i.used; }).length,
+      intro: rateOf(tries(moves).filter(function (m) { return m.move === "intro"; })),
+      cold: rateOf(tries(moves).filter(function (m) { return m.move === "cold"; })),
+      groups: split(usedIntro)
+    };
+    // --- content: did being known help? ---
+    var content = split(function (p) { return p.state.aware; });
+    // --- message: the right one for this giant, or not (start-ups that picked one) ---
+    var withMsg = startups.filter(function (p) { return p.state.giant && p.state.message; });
+    function fits(p) { return R.giants[p.state.giant] && R.giants[p.state.giant].priority === p.state.message; }
+    var message = { right: group(withMsg.filter(fits)), wrong: group(withMsg.filter(function (p) { return !fits(p); })),
+                    researched: startups.filter(function (p) { return p.state.researched; }).length };
+    // --- targeting: going where you know someone, and how crowded each giant was ---
+    var targeting = split(function (p) { return p.card.contact && p.card.contact.giant === p.state.giant; });
+    // --- where campaigns ended ---
+    var stuck = [0, 1, 2, 3, 4].map(function (d) { return startups.filter(function (p) { return p.state.giant && p.state.progress === d; }).length; });
+    // --- the first thing each start-up did ---
+    var firsts = {};
+    startups.forEach(function (p) {
+      var m = mine(p).sort(function (a, b) { return a.at - b.at; })[0];
+      if (!m) return;
+      (firsts[m.move] = firsts[m.move] || []).push(p);
+    });
+    var first = Object.keys(firsts).map(function (k) { return { key: k, n: firsts[k].length, doors: avg(firsts[k].map(function (p) { return p.state.progress; })) }; })
+      .sort(function (a, b) { return b.n - a.n; });
+    // --- points ---
+    var board = startups.map(function (p) {
+      var sc = E.score(p, startups, intros, cfg, slots);
+      var helped = {};
+      intros.forEach(function (i) { if (i.from_id === p.id && byId[i.to_id] && byId[i.to_id].state.rank != null) helped[i.to_id] = true; });
+      return { name: p.name, org: p.card.org, points: sc.total, doors: p.state.progress, rank: p.state.rank, giant: p.state.giant,
+               gave: intros.filter(function (i) { return i.from_id === p.id; }).length, helped: Object.keys(helped).length, is_bot: p.is_bot };
+    });
+    var leaders = {
+      startups: board.slice().sort(function (a, b) { return b.points - a.points || a.name.localeCompare(b.name); }),
+      connectors: board.filter(function (x) { return x.gave > 0; }).sort(function (a, b) { return b.helped - a.helped || b.gave - a.gave || a.name.localeCompare(b.name); })
+    };
+    // --- what the winners did that the others did not ---
+    var won = startups.filter(function (p) { return p.state.rank != null; }), rest = startups.filter(function (p) { return p.state.rank == null; });
+    function share(list, test) { return rate(list.filter(test).length, list.length); }
+    var winners = {
+      n: won.length, others: rest.length,
+      rows: [
+        { key: "intro", label: "Used an introduction", won: share(won, usedIntro), rest: share(rest, usedIntro) },
+        { key: "content", label: "Published a case study", won: share(won, function (p) { return p.state.aware; }), rest: share(rest, function (p) { return p.state.aware; }) },
+        { key: "message", label: "Had the right message", won: share(won, function (p) { return p.state.giant && fits(p); }), rest: share(rest, function (p) { return p.state.giant && fits(p); }) }
+      ]
+    };
+
+    var rounds = [];
+    for (var r = 1; r <= (R.rounds || 0); r++) {
+      rounds.push({ round: r, moves: moveRates(moves, r), opened: tries(moves).filter(function (m) { return m.round === r && m.success; }).length,
+                    signed: startups.filter(function (p) { return p.state.signed_round != null && p.state.signed_round <= r; }).length });
+    }
+    return {
+      simulated: full.players.filter(function (p) { return p.is_bot; }).length,
+      counts: { startups: startups.length, giants: ids.length, moves: moves.length, slots: slots, rounds: R.rounds || 0 },
+      funnel: funnel(pub, slots), giants: byGiant(pub, ids, cards, slots),
+      moves: moveRates(moves), doors: [0, 1, 2, 3].map(function (d) { return moveRates(moves, null, d); }),
+      network: network, content: content, message: message, targeting: targeting, stuck: stuck, first: first,
+      leaders: leaders, winners: winners, rounds: rounds
+    };
   }
 
   // ---------- CSV ----------
@@ -165,41 +133,36 @@
   function iso(ms) { return ms ? new Date(ms).toISOString() : ""; }
   function yn(b) { return b == null ? "" : b ? "yes" : "no"; }
 
-  // One line per buyer per round, including the rounds where a buyer stayed.
-  function decisionsCsv(full, cfg) {
-    var E = B2B.engine, byId = {};
+  // One line per marketing move.
+  function movesCsv(full, cards) {
+    var byId = {}, giants = {}, doors = cards.doors || [];
     full.players.forEach(function (p) { byId[p.id] = p; });
-    var buyers = full.players.filter(function (p) { return p.role === "buyer"; });
-    var N = Math.max(E.roundCount(cfg), full.deals.reduce(function (m, d) { return Math.max(m, d.round); }, 0));
-    var header = ["round", "buyer_name", "buyer_enterprise", "decision", "decided_by_tapping", "seconds_into_round", "startup_name", "startup",
-      "startup_ready", "startup_had_proof", "delivered", "buyer_knew_startup", "startup_had_delivered_before", "buyer_points", "startup_points",
-      "buyer_simulated", "startup_simulated"];
-    var lines = [];
-    for (var r = 1; r <= N; r++) {
-      buyers.forEach(function (b) {
-        var d = E.rowOf(b, full.deals, r), s = d && d.seller_id ? byId[d.seller_id] : null;
-        var k = s ? (b.card.knows || []).filter(function (x) { return x.id === s.id; })[0] : null;
-        lines.push([r, b.name, b.card.org, !d || d.kind === "stay" ? "stayed" : d.kind === "pilot" ? "pilot" : "full deal", yn(!!d), d ? d.t : "",
-          s ? s.name : "", s ? s.card.org : "", s ? yn(s.card.ready) : "", s ? yn(s.card.proof) : "", s ? yn(d.delivered) : "",
-          s ? yn(!!k) : "", s ? yn(E.record(s.id, full.deals, r - 1).delivered.length > 0) : "",
-          E.buyerRound(d, cfg), s ? E.sellerRound(d, cfg) : "", yn(b.is_bot), s ? yn(s.is_bot) : ""]);
-      });
-    }
-    return toCsv(header, lines);
+    (cards.giants || []).forEach(function (g) { giants[g.id] = g.name; });
+    var header = ["round", "seconds_into_round", "player", "startup", "target", "door", "move", "chance_pct", "opened_the_door", "introduced_by", "player_simulated"];
+    return toCsv(header, full.moves.slice().sort(function (a, b) { return a.at - b.at; }).map(function (m) {
+      var p = byId[m.player_id] || {}, via = m.via ? byId[m.via] : null;
+      return [m.round, m.t, p.name, p.card ? p.card.org : "", giants[m.giant] || m.giant, doors[m.door] || m.door, m.move, m.odds == null ? "" : m.odds,
+        yn(m.success), via ? (via.id === m.player_id ? "own contact" : via.name) : "", yn(p.is_bot)];
+    }));
   }
 
-  function playersCsv(full, cfg) {
-    var E = B2B.engine;
-    var N = Math.max(E.roundCount(cfg), full.deals.reduce(function (m, d) { return Math.max(m, d.round); }, 0));
-    var header = ["name", "simulated", "role", "organisation", "product_ready", "has_proof", "deal_code", "knows", "deals_signed", "times_burned", "points", "joined_at"];
-    var lines = full.players.map(function (p) {
-      var c = p.card || {}, mine = full.deals.filter(function (d) { return d.kind !== "stay" && (d.buyer_id === p.id || d.seller_id === p.id); });
-      return [p.name, yn(p.is_bot), p.role, c.org || "", p.role === "seller" ? yn(c.ready) : "", p.role === "seller" ? yn(c.proof) : "", c.code || "",
-        (c.knows || []).map(function (k) { return k.name + " (" + (k.ready ? "works" : "not ready") + ")"; }).join("; "),
-        p.role ? mine.length : "", p.role === "buyer" ? mine.filter(function (d) { return !d.delivered; }).length : "",
-        p.role ? E.score(p, full.deals, N, cfg).total : "", iso(p.joined_at)];
-    });
-    return toCsv(header, lines);
+  function playersCsv(full, cards, cfg) {
+    var E = B2B.engine, giants = {}, R = full.rules || {}, slots = R.slots || cfg.game.slots;
+    (cards.giants || []).forEach(function (g) { giants[g.id] = g.name; });
+    var startups = full.players.filter(function (p) { return p.role; });
+    var header = ["name", "simulated", "startup", "code", "knows", "knows_at", "target", "knew_someone_at_target", "message", "right_message", "published_case_study",
+      "researched", "doors_opened", "signed", "signing_order", "moves_made", "introductions_given", "introductions_received", "points", "joined_at"];
+    return toCsv(header, full.players.map(function (p) {
+      var c = p.card || {}, s = p.state || {}, k = c.contact || {};
+      var pr = s.giant && R.giants && R.giants[s.giant] ? R.giants[s.giant].priority : null;
+      return [p.name, yn(p.is_bot), c.org || "", c.code || "", k.name ? k.name + ", " + k.title : "", giants[k.giant] || "", giants[s.giant] || "",
+        s.giant ? yn(k.giant === s.giant) : "", s.message || "", s.giant && s.message ? yn(pr === s.message) : "", yn(s.aware), yn(s.researched),
+        p.role ? s.progress : "", p.role ? yn(s.rank != null) : "", s.rank == null ? "" : s.rank,
+        p.role ? full.moves.filter(function (m) { return m.player_id === p.id; }).length : "",
+        p.role ? full.intros.filter(function (i) { return i.from_id === p.id; }).length : "",
+        p.role ? full.intros.filter(function (i) { return i.to_id === p.id; }).length : "",
+        p.role ? E.score(p, startups, full.intros, cfg, slots).total : "", iso(p.joined_at)];
+    }));
   }
 
   function eventsCsv(events, players) {
@@ -210,6 +173,6 @@
     }));
   }
 
-  B2B.stats = { compute: compute, liveRounds: liveRounds };
-  B2B.exporter = { decisionsCsv: decisionsCsv, playersCsv: playersCsv, eventsCsv: eventsCsv };
+  B2B.stats = { compute: compute, funnel: funnel, byGiant: byGiant, moveRates: moveRates, DOOR_MOVES: DOOR_MOVES };
+  B2B.exporter = { movesCsv: movesCsv, playersCsv: playersCsv, eventsCsv: eventsCsv };
 })(typeof window !== "undefined" ? window : globalThis);

@@ -63,12 +63,12 @@
     roundMs: function (ctx, hs) { return speed.ms(ctx.code, hs.players, ctx.cfg.roundSeconds * 1000); },
     revealMs: function (ctx, hs) { return speed.ms(ctx.code, hs.players, ctx.cfg.revealSeconds * 1000); },
 
-    // The host pressed Start: deal the role cards, then begin the briefing.
+    // The host pressed Start: draw this game's rules, deal the role cards, then begin the briefing.
     start: function (ctx, hs) {
-      var patch = E.assign(hs.players.map(function (p) { return { id: p.id, name: p.name }; }), ctx.cards, ctx.cfg);
+      var rules = E.makeRules(hs.players.length, ctx.cards, ctx.cfg);
+      var patch = E.assign(hs.players.map(function (p) { return { id: p.id, name: p.name }; }), ctx.cards, rules);
       return ctx.api.hostApply(ctx.code, ctx.pin, patch).then(function () {
-        return ctx.api.host(ctx.code, ctx.pin, "start",
-          { briefing_ms: speed.ms(ctx.code, hs.players, ctx.cfg.briefingSeconds * 1000), rules: E.serverRules(ctx.cfg) });
+        return ctx.api.host(ctx.code, ctx.pin, "start", { briefing_ms: speed.ms(ctx.code, hs.players, ctx.cfg.briefingSeconds * 1000), rules: rules });
       });
     },
     openRound: function (ctx, hs) { return ctx.api.host(ctx.code, ctx.pin, "open", { ms: driver.roundMs(ctx, hs) }); },
@@ -81,7 +81,7 @@
       var assigned = hs.players.filter(function (p) { return p.role; });
       var newcomers = hs.players.filter(function (p) { return !p.role; });
       if (g.phase !== "lobby" && g.phase !== "locked" && newcomers.length) {
-        step = function () { return ctx.api.hostApply(ctx.code, ctx.pin, E.assignLate(newcomers, assigned, ctx.cards, ctx.cfg)); };
+        step = function () { return ctx.api.hostApply(ctx.code, ctx.pin, E.assignLate(newcomers, assigned, ctx.cards, g.rules)); };
       } else if (g.phase === "briefing" && hs.now >= g.briefing_ends_at) {
         step = function () { return driver.openRound(ctx, hs); };
       } else if (g.phase === "open" && hs.now >= g.ends_at) {
@@ -117,73 +117,77 @@
       return Promise.all(jobs);
     },
 
-    // A simulated buyer's character, and when in each round it makes up its mind.
+    // A simulated founder's habits. About a third only ever send cold emails; the rest market first.
     plan: function (p) {
       var r = bots.rnd, pl = bots.plans[p.id];
-      if (!pl) pl = bots.plans[p.id] = { nerve: r(), at: {}, met: {} };
+      if (!pl) pl = bots.plans[p.id] = { cold: r() < 0.3, generous: r() < 0.6, next: {}, vouchAt: {}, pickAt: 0.1 + r() * 0.7 };
       return pl;
     },
 
-    // What a simulated buyer believes about a start-up, from what it is allowed to see in this round.
-    belief: function (b, s, deals, round, rule) {
-      var done = round - 1;
-      var own = deals.filter(function (d) { return d.round <= done && d.buyer_id === b.id && d.seller_id === s.id; });
-      if (own.some(function (d) { return d.delivered === false; })) return "bad";      // it burned me
-      if (own.some(function (d) { return d.delivered === true; })) return "good";      // it delivered for me
-      if (rule.intros) {
-        var k = b.card.knows.filter(function (x) { return x.id === s.id; })[0];
-        if (k) return k.ready ? "good" : "bad";
-      }
-      if (rule.record) {
-        var rec = E.record(s.id, deals, done);
-        if (rec.failed.length) return "bad";
-        if (rec.delivered.length) return "good";
-      }
-      if (rule.proof && s.card.proof) return "good";
-      return "unknown";
+    // Choose a giant and a message. A founder who knows someone inside a giant usually goes after that one.
+    choose: function (ctx, hs, p) {
+      var r = bots.rnd, ids = Object.keys(hs.game.rules.giants), c = p.card.contact;
+      var giant = c && r() < 0.55 ? c.giant : E.pick(ids, r);
+      var message = c && c.giant === giant ? p.card.hint : E.pick(E.MESSAGES, r);
+      return ctx.api.target(ctx.code, p.token, giant, message);
     },
 
-    // One simulated buyer decides for the round. Returns a Promise, or null to try again later.
-    decide: function (ctx, hs, b, pl) {
-      var r = bots.rnd, g = hs.game, round = g.round, rule = E.roundRule(ctx.cfg, round);
-      var sellers = hs.players.filter(function (p) { return p.role === "seller"; });
-      // In two minutes a buyer hears a handful of pitches, not all of them.
-      if (!pl.met[round]) {
-        pl.met[round] = E.shuffle(sellers, r).slice(0, 3 + Math.floor(r() * 3)).map(function (s) { return s.id; });
-        // With an introduction in hand, a buyer goes looking for the start-up it knows.
-        if (rule.intros) (b.card.knows || []).forEach(function (k) { if (pl.met[round].indexOf(k.id) < 0) pl.met[round].push(k.id); });
-      }
-      var free = sellers.filter(function (s) {
-        return pl.met[round].indexOf(s.id) >= 0 && !hs.deals.some(function (d) { return d.round === round && d.seller_id === s.id; });
-      });
-      var good = [], unknown = [];
-      free.forEach(function (s) {
-        var v = bots.belief(b, s, hs.deals, round, rule);
-        if (v === "good") good.push(s); else if (v === "unknown") unknown.push(s);
-      });
-      var pickOne = null, kind = "stay";
-      if (good.length && r() < 0.92) { pickOne = E.pick(good, r); kind = "full"; }
-      else if (unknown.length) {
-        if (rule.pilot) { if (r() < 0.35 + 0.35 * pl.nerve) { pickOne = E.pick(unknown, r); kind = "pilot"; } }
-        else if (r() < 0.1 + 0.4 * pl.nerve) { pickOne = E.pick(unknown, r); kind = "full"; }      // a blind bet on the pitch alone
-      }
-      return ctx.api.sign(ctx.code, b.token, pickOne ? pickOne.card.code : null, kind);
+    // The next move of one simulated start-up, or null when it has nothing sensible left to do this round.
+    nextMove: function (ctx, hs, p, pl) {
+      var r = bots.rnd, R = hs.game.rules, st = p.state, door = st.progress, left = E.budgetLeft(R, st, hs.game.round);
+      function can(m) { return R.moves[m] && R.moves[m].cost <= left; }
+      // An introduction in hand is always the first thing to use.
+      var intro = hs.intros.filter(function (i) { return i.to_id === p.id && !i.used && i.giant === st.giant && i.door === door; })[0];
+      if (intro && can("intro")) return { move: "intro", intro: intro.id };
+      var c = p.card.contact;
+      if (c && c.giant === st.giant && c.door === door && !st.self_used && can("intro")) return { move: "intro", intro: "self" };
+      if (pl.cold) return can("cold") ? { move: "cold" } : null;
+      if (!st.aware && can("content") && r() < 0.8) return { move: "content" };
+      if (!E.knowsPriority(p.card, st) && can("research") && r() < 0.35) return { move: "research" };
+      var best = [["pilot", "cold"], ["proof"], ["partner", "proof"], ["pilot", "proof"]][door];
+      for (var i = 0; i < best.length; i++) if (can(best[i])) return { move: best[i] };
+      return null;
     },
 
     // Call on every host refresh. Bots act through the normal player calls.
     tick: function (ctx, hs) {
-      var g = hs.game, jobs = [];
+      var g = hs.game, jobs = [], r = bots.rnd;
       if (g.phase === "lobby") { bots.plans = {}; return Promise.resolve(0); }
+      var mine = hs.players.filter(function (p) { return p.is_bot && p.role && p.token; });
+      if (g.phase === "briefing") {
+        var gone = g.briefing_ends_at ? 1 - Math.max(0, g.briefing_ends_at - hs.now) / Math.max(1, ctx.cfg.briefingSeconds * 1000 / speed.of(ctx.code, hs.players)) : 1;
+        mine.forEach(function (p) {
+          var pl = bots.plan(p);
+          if (!p.state.giant && gone >= pl.pickAt) jobs.push(bots.choose(ctx, hs, p).catch(function () {}));
+        });
+        return Promise.all(jobs).then(function () { return jobs.length; });
+      }
       if (g.phase !== "open" || !g.total_ms) return Promise.resolve(0);
       var frac = (g.total_ms - Math.max(0, g.ends_at - hs.now)) / g.total_ms;
-      hs.players.forEach(function (b) {
-        if (!b.is_bot || b.role !== "buyer" || !b.token) return;
-        if (hs.deals.some(function (d) { return d.round === g.round && d.buyer_id === b.id; })) return;
-        var pl = bots.plan(b);
-        if (pl.at[g.round] == null) pl.at[g.round] = 0.2 + bots.rnd() * 0.65;
-        if (frac < pl.at[g.round]) return;
-        // Lost a race for a start-up that was signed a moment ago: think again on the next refresh.
-        jobs.push(bots.decide(ctx, hs, b, pl).catch(function () { pl.met[g.round] = null; }));
+      mine.forEach(function (p) {
+        var pl = bots.plan(p), st = p.state;
+        if (!st.giant) { jobs.push(bots.choose(ctx, hs, p).catch(function () {})); return; }
+        // Introduce a classmate who is standing at the door of the person this founder knows.
+        if (pl.vouchAt[g.round] == null) pl.vouchAt[g.round] = 0.05 + r() * 0.6;
+        if (pl.generous && st.vouched < g.rules.vouches && frac >= pl.vouchAt[g.round] && !pl["v" + g.round]) {
+          pl["v" + g.round] = true;
+          var c = p.card.contact;
+          var asking = hs.players.filter(function (x) {
+            return x.role && x.id !== p.id && x.state.giant === c.giant && x.state.progress === c.door &&
+              !hs.intros.some(function (i) { return i.to_id === x.id && i.door === c.door && i.giant === c.giant; });
+          });
+          if (asking.length) { jobs.push(ctx.api.vouch(ctx.code, p.token, E.pick(asking, r).card.code).catch(function () {})); return; }
+        }
+        // Spend the budget in a few sittings spread over the round.
+        if (pl.next[g.round] == null) pl.next[g.round] = 0.08 + r() * 0.3;
+        if (frac < pl.next[g.round] || st.progress >= E.DOORS) return;
+        pl.next[g.round] = frac + 0.1 + r() * 0.2;
+        if (E.knowsPriority(p.card, st) && g.rules.giants[st.giant].priority !== st.message) {
+          jobs.push(ctx.api.target(ctx.code, p.token, null, g.rules.giants[st.giant].priority).catch(function () {}));
+          return;
+        }
+        var m = bots.nextMove(ctx, hs, p, pl);
+        if (m) jobs.push(ctx.api.move(ctx.code, p.token, m.move, m.intro).catch(function () {}));
       });
       return Promise.all(jobs).then(function () { return jobs.length; });
     }

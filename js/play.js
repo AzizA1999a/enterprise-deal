@@ -1,13 +1,13 @@
-/* The player's phone.
-   A buyer makes one decision per round: stay, or sign a start-up by typing its two-digit deal code.
-   A start-up only talks: its phone shows its deal code, its secret, and who signed it. */
+/* The player's phone. Everyone runs a start-up's marketing campaign to get inside one large company.
+   Campaign tab: the four doors, this round's budget, and the moves (each with its cost and its chance).
+   Network tab: the player's code, the person they know, and introductions given and received. */
 (function () {
   "use strict";
   var B2B = window.B2B, ui = B2B.ui, E = B2B.engine, api = B2B.api, cfg = window.B2B_CONFIG, store = B2B.store;
-  var esc = ui.esc, P = cfg.payoff;
+  var esc = ui.esc, P = cfg.points;
   var app = document.getElementById("app"), sheetEl = document.getElementById("sheet"), toastEl = document.getElementById("toast");
 
-  var S = { code: "", token: "", st: undefined, cards: null, tab: "main", sheet: null, busy: false, key: "", typed: "", signedBy: null };
+  var S = { code: "", token: "", st: undefined, cards: null, tab: "main", busy: false, key: "", typed: "", last: null, seenIntros: null };
   S.code = (ui.qs("g") || store.getItem("b2bsim.lastcode") || "").toUpperCase().replace(/[^A-Z]/g, "");
   var refresh = function () {};
 
@@ -20,159 +20,156 @@
 
   // ---------- small helpers ----------
   function pts(n) { return (n > 0 ? "+" : n < 0 ? "−" : "") + Math.abs(n); }
-  function word(r) { return (S.cards.rounds[r - 1] || {}); }
+  function giant(id) { return (S.cards.giants || []).filter(function (g) { return g.id === id; })[0] || { id: id, name: id, need: "", people: [] }; }
+  function person(id, door) { return giant(id).people[door] || { name: "", title: "" }; }
+  function doorName(d) { return S.cards.doors[d] || "Door " + (d + 1); }
+  function msg(k) { return S.cards.messages[k] || k; }
+  function moveText(k) { return S.cards.moves[k] || { title: k, sub: "" }; }
+  function ordinal(n) { return n === 1 ? "1st" : n === 2 ? "2nd" : n === 3 ? "3rd" : n + "th"; }
+  function dots(n, total) { return "●".repeat(Math.max(0, n)) + "○".repeat(Math.max(0, total - n)); }
   function header(sub, title, clockLabel) {
     return '<header class="top"><div class="row"><div><div class="label">' + esc(sub) + "</div><h1>" + esc(title) + "</h1></div>" +
       (clockLabel ? '<div style="text-align:right"><div class="label">' + esc(clockLabel) + '</div><div class="clock num" data-clock></div></div>' : "") +
       "</div></header>";
   }
-  function kindName(k) { return k === "pilot" ? "a pilot" : "the full deal"; }
-  function sellerById(st, id) { return st.sellers.filter(function (s) { return s.id === id; })[0] || null; }
-  function total(st) { return E.score(st.me, st.closed, E.closedRounds(st.game), cfg); }
-  // The payoff table, as the buyer needs it in front of them.
-  function payoffTable(rule, incumbent) {
-    function row(a, b, c) { return "<tr><td>" + a + '</td><td class="num good">' + b + '</td><td class="num bad">' + c + "</td></tr>"; }
-    return '<table class="payoff"><tr><th></th><th>It delivers</th><th>It fails</th></tr>' +
-      "<tr><td>Stay with " + esc(incumbent) + '</td><td class="num" colspan="2" style="text-align:center">' + pts(P.stay) + ", always</td></tr>" +
-      row("Sign a start-up: full deal", pts(P.fullWin), pts(P.fullLose)) +
-      (rule.pilot ? row("Sign a start-up: pilot", pts(P.pilotWin), pts(P.pilotLose)) : "") + "</table>";
-  }
-  // One line per closed round: what happened and what it was worth.
-  function history(st) {
-    var sc = total(st), me = st.me;
-    if (!sc.rounds.length) return "";
-    return '<div class="card stack"><div class="row"><div class="label">Your rounds so far</div><div class="bigname num">' + pts(sc.total) + '</div></div><table class="breakdown">' +
-      sc.rounds.map(function (x) {
-        var d = x.row, text;
-        if (me.role === "buyer") {
-          var s = d && d.seller_id ? sellerById(st, d.seller_id) : null;
-          text = !d ? "Stayed (no decision)" : d.kind === "stay" ? "Stayed" :
-            (d.kind === "pilot" ? "Pilot with " : "Full deal with ") + esc(s ? s.org : "a start-up") + (d.delivered ? ": delivered" : ': <span class="bad">failed</span>');
-        } else {
-          text = !d ? "Nobody signed you" : "Signed, " + (d.kind === "pilot" ? "pilot" : "full deal") + (d.delivered ? "" : ' <span class="bad">(you failed to deliver)</span>');
-        }
-        return "<tr><td>Round " + x.round + " · " + text + '</td><td class="num">' + pts(x.points) + "</td></tr>";
-      }).join("") + "</table></div>";
-  }
-
-  // ---------- role cards ----------
-  function secretCard(c) {
-    var T = S.cards.secret;
-    return '<div class="card stack secret ' + (c.ready ? "ok" : "no") + '"><div class="label">Your secret. Show this to nobody.</div>' +
-      '<div class="bigname">' + (c.ready ? "Your product works." : "Your product is not ready.") + "</div><p>" + esc(c.ready ? T.ready : T.notReady) + "</p>" +
-      (c.ready ? '<p class="muted">' + esc(c.proof ? T.proof : T.noProof) + "</p>" : "") + "</div>";
-  }
-  function codeCard(c) {
-    return '<div class="badge seller"><div class="strip">Start-up · selling</div><div class="who"><div class="n">' + esc(S.st.me.name) + '</div><div class="o">' + esc(c.org) +
-      '</div><div class="muted" style="margin-top:4px">' + esc(c.tagline) + '</div></div><div class="desk"><div class="label">Your deal code</div><div class="d num">' + esc(c.code) +
-      '</div><div class="muted">A buyer signs you by typing this on their phone.</div></div></div>';
-  }
-  function sellerCard(c) {
-    return codeCard(c) + secretCard(c) +
-      '<div class="card note stack"><div class="label">How you play</div><p><b>Walk up to buyers and pitch.</b> When one wants to sign, tell them your deal code. One buyer can sign you per round.</p>' +
-      '<p class="muted">A full deal scores you ' + pts(P.sellerFull) + ", a pilot " + pts(P.sellerPilot) + ". There are " + E.roundCount(cfg) + " rounds, and each one changes what buyers can check.</p></div>";
-  }
-  function buyerCard(c) {
-    return '<div class="card stack"><div class="rolebanner"><img src="art/buyer-s.jpg" alt=""></div><div class="label">You are the ' + esc(c.title) + ' at</div><div class="bigname">' + esc(c.org) + "</div>" +
-      (c.need ? "<p>You need: " + esc(c.need) + "</p>" : "") + "<p>Your supplier today is <b>" + esc(c.incumbent) + "</b>.</p></div>" +
-      '<div class="card warn stack"><div class="label" style="color:var(--bad)">Your choice, every round</div><p><b>' + esc(S.cards.buyerRule) + "</b></p>" +
-      payoffTable(E.roundRule(cfg, E.roundCount(cfg)), c.incumbent) + "</div>" +
-      '<div class="card note stack"><div class="label">How you play</div><p><b>Start-ups will come to you and pitch.</b> Some have a product that is not ready, and they will not tell you. To sign one, type its deal code. Or tap Stay.</p>' +
-      '<p class="muted">One decision per round, ' + E.roundCount(cfg) + " rounds. If you do nothing, you stay.</p></div>";
-  }
-  function roleCard(me) { return me.role === "seller" ? sellerCard(me.card) : buyerCard(me.card); }
-  function roleLine(me) { return me.role === "seller" ? "Start-up" : "Buyer"; }
-
-  // ---------- a round, for a start-up ----------
-  function sellerRound(st) {
-    var me = st.me, c = me.card, g = st.game, rule = E.roundRule(cfg, g.round), d = st.mine;
-    var rec = E.record(me.id, st.closed, E.closedRounds(g));
-    var html = '<div class="card note"><p><b>Round ' + g.round + ": " + esc(word(g.round).title) + ".</b> " + esc(word(g.round).seller) + "</p></div>";
-    html += d ? '<div class="banner done" style="margin:0 0 14px;border-radius:14px">Signed this round: ' + (d.kind === "pilot" ? "a pilot" : "the full deal") + ". " + pts(E.sellerRound(d, cfg)) + ".</div>"
-              : '<div class="card"><p><b>Nobody has signed you yet this round.</b> Find a buyer and pitch.</p></div>';
-    html += codeCard(c);
-    if (rule.proof) {
-      html += '<div class="card stack"><div class="label">What a buyer sees when they type your code</div>' +
-        (c.proof ? '<div class="check ok">✓ Proof on file: a reference customer</div>' : '<div class="check no">No proof on file</div>') +
-        (rule.record ? (rec.delivered.length ? '<div class="check ok">✓ Delivered in ' + rec.delivered.length + (rec.delivered.length === 1 ? " earlier round" : " earlier rounds") + "</div>" : "") +
-          (rec.failed.length ? '<div class="check no">✗ Failed to deliver in ' + rec.failed.length + (rec.failed.length === 1 ? " earlier round" : " earlier rounds") + "</div>" : "") +
-          (!rec.delivered.length && !rec.failed.length ? '<div class="check">No record yet</div>' : "") : "") + "</div>";
-    }
-    return html + secretCard(c) + history(st);
-  }
-
-  // ---------- a round, for a buyer ----------
-  function knownList(st) {
-    var c = st.me.card;
-    if (!c.knows || !c.knows.length) return "";
-    return '<div class="card conn stack"><div class="label">People you know</div>' + c.knows.map(function (k) {
-      var s = sellerById(st, k.id);
-      return '<div class="row"><div><b>' + esc(k.name) + '</b><div class="muted">' + esc(k.org) + "</div></div>" +
-        '<span class="chip ' + (k.ready ? "good" : "bad") + '">' + (k.ready ? "Their product works" : "Not ready. Stay away") + "</span></div>" +
-        (s && s.is_bot && !s.busy && !st.mine && st.game.phase === "open" ? '<button class="btn small" data-act="look" data-id="' + esc(s.code) + '">Look at ' + esc(k.org) + "</button>" : "");
+  function doorsRow(st, big) {
+    var s = st.me.state, people = giant(s.giant).people;
+    return '<div class="doors' + (big ? " big" : "") + '">' + [0, 1, 2, 3].map(function (d) {
+      var cls = d < s.progress ? " open" : d === s.progress ? " now" : "";
+      return '<div class="door' + cls + '"><div class="k">' + (d < s.progress ? "✓" : d + 1) + '</div><div class="t">' + esc(doorName(d)) + "</div>" +
+        (big && people[d] ? '<div class="w">' + esc(people[d].name) + "</div>" : "") + "</div>";
     }).join("") + "</div>";
   }
-  // Simulated start-ups cannot be talked to, so a buyer may tap them (demo mode only).
-  function botList(st) {
-    var botsOnly = st.sellers.filter(function (s) { return s.is_bot; });
-    if (!botsOnly.length) return "";
-    var rule = E.roundRule(cfg, st.game.round);
-    return '<div class="label" style="margin:18px 0 8px">Simulated start-ups (tap one to look)</div>' + botsOnly.map(function (s) {
-      return '<button class="option' + (s.busy ? " cant" : "") + '" data-act="look" data-id="' + esc(s.code) + '"' + (s.busy ? " disabled" : "") + '><span style="flex:1"><b>' + esc(s.org) +
-        '</b><br><span class="muted">' + esc(s.name) + " · " + esc(s.tagline) + "</span></span>" +
-        (s.busy ? '<span class="chip grey">Signed</span>' : rule.proof && s.proof ? '<span class="chip good">Proof</span>' : "") + "</button>";
-    }).join("");
+  function myScore(st) {
+    var s = st.me.state, R = st.game.rules, parts = [];
+    if (s.progress) parts.push({ label: s.progress + (s.progress === 1 ? " door opened" : " doors opened"), value: s.progress * P.door });
+    if (s.rank != null) parts.push(s.rank <= R.slots ? { label: "Signed, among the first " + R.slots, value: P.win } : { label: "Got the signature, but too late", value: P.late });
+    var helped = {};
+    st.given.forEach(function (i) { if (i.to_signed) helped[i.to_id] = true; });
+    var n = Object.keys(helped).length;
+    if (n) parts.push({ label: n + (n === 1 ? " start-up you introduced signed" : " start-ups you introduced signed"), value: n * P.vouch });
+    return { total: parts.reduce(function (a, x) { return a + x.value; }, 0), parts: parts };
   }
-  function buyerRound(st) {
-    var me = st.me, c = me.card, g = st.game, rule = E.roundRule(cfg, g.round), d = st.mine, html = "";
-    html += '<div class="card note"><p><b>Round ' + g.round + ": " + esc(word(g.round).title) + ".</b> " + esc(word(g.round).buyer) + "</p></div>";
-    if (d) {
-      var s = d.seller_id ? sellerById(st, d.seller_id) : null;
-      html += '<div class="banner done" style="margin:0 0 14px;border-radius:14px">' +
-        (d.kind === "stay" ? "You stayed with " + esc(c.incumbent) + " this round." : "You signed " + kindName(d.kind) + " with " + esc(s ? s.org : "a start-up") + ".") + " Wait for the reveal.</div>";
-    } else {
-      html += '<div class="card stack"><div class="label">Sign a start-up</div><p>Type the deal code the start-up tells you.</p>' +
-        '<input class="field deskinput num" id="codeInput" inputmode="numeric" maxlength="2" autocomplete="off" placeholder="--" value="' + esc(S.typed) + '">' +
-        '<button class="btn primary block" data-act="lookup"' + (S.busy ? " disabled" : "") + ">Look at this start-up</button>" + payoffTable(rule, c.incumbent) + "</div>";
-    }
-    if (rule.intros) html += knownList(st);
-    if (!d) html += botList(st);
-    html += history(st);
-    // The Stay button is pinned to the bottom of the screen; the spacer keeps it from covering the end of the page.
-    if (!d) html += '<div style="height:84px"></div><div class="sticky-bottom"><button class="btn block" data-act="stay-open">Stay this round · ' + pts(P.stay) + "</button></div>";
+
+  // ---------- choosing a target ----------
+  function targetView(st, locked) {
+    var me = st.me, s = me.state, c = me.card, R = st.game.rules, html = "";
+    html += '<div class="card stack"><div class="label">Your start-up</div><div class="bigname">' + esc(c.org) + "</div><p>" + esc(c.tagline) + "</p></div>";
+    html += '<div class="label" style="margin:16px 0 8px">1 · Which company will you go after?</div>';
+    R.giants.forEach(function (id) {
+      var g = giant(id), t = st.giants[id] || { taken: 0 }, on = s.giant === id, knows = c.contact.giant === id;
+      html += '<button class="option tall' + (on ? " on" : "") + '" data-act="giant" data-id="' + esc(id) + '"' + (locked && !on ? " disabled" : "") + '><span class="box">' + (on ? "✓" : "") + '</span><span style="flex:1"><b>' + esc(g.name) +
+        '</b><br><span class="muted">' + esc(g.need) + "</span>" +
+        (knows ? '<br><span class="chip conn" style="margin-top:6px">You know ' + esc(c.contact.name) + ", " + esc(c.contact.title) + "</span>" : "") +
+        '<br><span class="muted num" style="font-size:0.85em">' + t.taken + (t.taken === 1 ? " start-up is" : " start-ups are") + " going after it · it signs the first " + R.slots + "</span></span></button>";
+    });
+    if (locked) html += '<p class="muted">You have started on ' + esc(giant(s.giant).name) + ", so you cannot switch now.</p>";
+    html += '<div class="label" style="margin:18px 0 8px">2 · What will you lead with?</div><div class="stack">' + E.MESSAGES.map(function (k) {
+      return '<button class="option' + (s.message === k ? " on" : "") + '" data-act="message" data-id="' + k + '"><span class="box">' + (s.message === k ? "✓" : "") + "</span><span><b>" + esc(msg(k)) + "</b></span></button>";
+    }).join("") + "</div>";
+    html += '<p class="muted" style="margin-top:8px">Each company cares most about one of these. The right one helps with the manager and the executive; the wrong one hurts.' +
+      (s.giant && c.contact.giant === s.giant ? " <b>" + esc(c.contact.name) + " told you: " + esc(giant(s.giant).name) + " cares most about “" + esc(msg(c.hint)) + "”.</b>" : " You can research it once the rounds start, or ask a classmate who knows someone there.") + "</p>";
     return html;
   }
 
-  // ---------- after a round ----------
-  function nextNote(st) {
-    var g = st.game, n = g.round + 1;
-    if (g.phase !== "reveal" || n > g.rounds) return "";
-    return '<div class="card note stack"><div class="label">Next: round ' + n + '</div><div class="bigname">' + esc(word(n).title) + "</div><p>" + esc(word(n).new) + "</p></div>";
+  // ---------- the campaign ----------
+  function fitLine(st) {
+    var s = st.me.state, g = giant(s.giant);
+    if (!s.message) return '<div class="check no">You have not picked a message yet. Tap Target.</div>';
+    if (st.priority == null) return '<div class="check">Your message: “' + esc(msg(s.message)) + "”. You do not know yet whether " + esc(g.name) + " cares.</div>";
+    return st.priority === s.message ? '<div class="check ok">✓ Your message, “' + esc(msg(s.message)) + "”, is what " + esc(g.name) + " cares about most.</div>"
+      : '<div class="check no">✗ ' + esc(g.name) + " cares most about “" + esc(msg(st.priority)) + "”, not “" + esc(msg(s.message)) + '”. <button class="btn small" data-act="message" data-id="' + esc(st.priority) + '">Switch</button></div>';
   }
-  function result(st) {
-    var me = st.me, g = st.game, r = g.round, d = E.rowOf(me, st.closed, r), n, head, text, bad = false;
-    if (me.role === "buyer") {
-      n = E.buyerRound(d, cfg);
-      var s = d && d.seller_id ? sellerById(st, d.seller_id) : null, who = esc(s ? s.org : "The start-up");
-      if (!d || d.kind === "stay") { head = "You stayed."; text = (d ? "" : "You did not decide, so nothing changed. ") + "Safe, and nothing gained."; }
-      else if (d.delivered) { head = who + " delivered."; text = d.kind === "pilot" ? "The pilot worked. A full deal would have been worth " + pts(P.fullWin) + "." : "You took the risk and it paid."; }
-      else { bad = true; head = who + " failed."; text = d.kind === "pilot" ? "It was never ready. But it was only a pilot: a full deal would have cost you " + pts(P.fullLose) + "." : "It was never ready. You signed it, so you answer for it."; }
+  function moveButton(st, key, opts) {
+    var s = st.me.state, R = st.game.rules, def = R.moves[key], t = moveText(key), door = s.progress, left = E.budgetLeft(R, s, st.game.round);
+    opts = opts || {};
+    var once = (key === "content" && s.aware) || (key === "research" && (s.researched || st.priority != null));
+    var off = S.busy || st.game.phase !== "open" || def.cost > left || once;
+    var chance;
+    if (key === "content") chance = s.aware ? "done" : "+" + R.awareBoost + "%";
+    else if (key === "research") chance = once ? "known" : "info";
+    else if (st.priority != null || key === "intro" || R.fitDoors.indexOf(door) < 0 || !s.message) chance = E.odds(R, key, door, s, st.priority) + "%";
+    else chance = E.baseOdds(R, key, door, s.aware) + "%<small> ±" + R.fit + "</small>";
+    return '<button class="mv' + (opts.strong ? " strong" : "") + '" data-act="move" data-id="' + key + '"' + (opts.intro ? ' data-intro="' + esc(opts.intro) + '"' : "") + (off ? " disabled" : "") + '><span class="tx"><b>' +
+      esc(opts.title || t.title) + '</b><br><span class="muted">' + esc(opts.sub || (key === "content" ? "Every later move is " + R.awareBoost + "% more likely to work" : t.sub)) + '</span></span><span class="od num">' + chance +
+      '<br><span class="muted">costs ' + def.cost + "</span></span></button>";
+  }
+  function campaign(st) {
+    var me = st.me, s = me.state, c = me.card, R = st.game.rules, g = st.game, G = giant(s.giant), html = "";
+    if (!s.giant) return '<div class="banner paused" style="margin:0 0 14px;border-radius:14px">Choose your target first.</div>' + targetView(st, false);
+    var done = s.progress >= E.DOORS, who = person(s.giant, s.progress), left = E.budgetLeft(R, s, g.round);
+    html += '<div class="card stack"><div class="row"><div><div class="label">Your target</div><div class="bigname">' + esc(G.name) + "</div></div>" +
+      '<div style="text-align:right"><div class="label">Budget this round</div><div class="dots bigname" aria-label="' + left + " of " + R.budget + '">' + dots(left, R.budget) + "</div></div></div>" + doorsRow(st, true) +
+      (done ? "" : '<p>Now: <b>' + esc(who.name) + "</b>, " + esc(who.title) + ". " + (s.progress === 0 ? "Nobody inside knows you yet." : "") + "</p>") + "</div>";
+    if (done) {
+      html += '<div class="banner done" style="margin:0 0 14px;border-radius:14px">' + (s.rank <= R.slots ? "Signed. You are the " + ordinal(s.rank) + " start-up into " + esc(G.name) + "." : "You got the signature, but " + esc(G.name) + " had already signed " + R.slots + " start-ups.") + "</div>";
     } else {
-      n = E.sellerRound(d, cfg);
-      if (!d) { head = "Nobody signed you."; text = "No deal this round."; }
-      else if (d.delivered) { head = "You were signed, and you delivered."; text = d.kind === "pilot" ? "A pilot: the door is open. A full deal is worth " + pts(P.sellerFull) + "." : "A full deal."; }
-      else { bad = true; head = "You got the deal. Then you failed."; text = "Your product was not ready. Your buyer lost " + Math.abs(d.kind === "pilot" ? P.pilotLose : P.fullLose) + (Math.abs(d.kind === "pilot" ? P.pilotLose : P.fullLose) === 1 ? " point" : " points") + ", and the room will see it."; }
+      if (S.last) html += '<div class="card result ' + (S.last.good ? "ok" : S.last.good === false ? "no" : "") + '"><p>' + S.last.text + "</p></div>";
+      html += fitLine(st);
+      html += '<div class="label" style="margin:16px 0 8px">Your moves</div>';
+      // introductions for this door
+      var mine = st.intros.filter(function (i) { return !i.used && i.giant === s.giant && i.door === s.progress; });
+      var own = c.contact.giant === s.giant && c.contact.door === s.progress && !s.self_used;
+      if (own) html += moveButton(st, "intro", { intro: "self", strong: true, title: "Call " + c.contact.name, sub: "You know them yourself" });
+      mine.forEach(function (i) { html += moveButton(st, "intro", { intro: i.id, strong: true, title: "Use " + i.from_name + "’s introduction", sub: i.from_name + " vouched for you with " + who.name }); });
+      if (!own && !mine.length) {
+        html += '<div class="card hint"><p><b>No introduction for this door.</b> Find a classmate who knows ' + esc(who.name) + ", " + esc(who.title) + " at " + esc(G.name) + ", and give them your code <span class=\"deskpill num\">" + esc(c.code) + "</span></p></div>";
+      }
+      ["content", "research", "proof", "pilot", "partner", "cold"].forEach(function (k) { if (R.moves[k]) html += moveButton(st, k); });
+      if (!left && g.phase === "open") html += '<p class="muted" style="text-align:center">Budget spent. While you wait: who in the room could introduce you to the next person?</p>';
     }
-    var sc = total(st);
-    return '<div class="card stack" style="text-align:center"><div class="label">Round ' + r + " of " + g.rounds + '</div><div class="bigname"' + (bad ? ' style="color:var(--bad)"' : "") + ">" + head + "</div>" +
-      '<div class="points num"' + (n < 0 ? ' style="color:var(--bad)"' : "") + ">" + pts(n) + "</div><p>" + text + "</p>" +
-      '<div class="row" style="margin-top:8px"><span class="label">Your total</span><span class="bigname num">' + pts(sc.total) + "</span></div></div>";
+    var hist = st.moves.filter(function (m) { return m.round === g.round; });
+    if (hist.length) {
+      html += '<div class="card stack"><div class="label">This round</div><table class="breakdown">' + hist.map(function (m) {
+        return "<tr><td>" + esc(moveText(m.move).title) + (m.success == null ? "" : " · " + esc(doorName(m.door))) + '</td><td class="num">' +
+          (m.success == null ? "done" : m.success ? '<span class="good">opened</span>' : '<span class="bad">no</span>') + "</td></tr>";
+      }).join("") + "</table></div>";
+    }
+    return html;
   }
-  function finalNote(st) {
-    var me = st.me, sc = total(st);
-    return '<div class="card note" style="text-align:center"><div class="bigname">Final score: ' + pts(sc.total) + "</div><p>" +
-      (me.role === "buyer" ? "A buyer who stayed every round has " + pts(st.game.rounds * P.stay) + "." : me.card.ready ? "Your product worked all along." : "Your product was never ready.") +
-      " Eyes on the big screen.</p></div>";
+
+  // ---------- the network ----------
+  function network(st) {
+    var me = st.me, s = me.state, c = me.card, R = st.game.rules, k = c.contact, left = R.vouches - s.vouched, html = "";
+    html += '<div class="badge seller"><div class="strip">Your code</div><div class="desk" style="border:0;margin:6px 14px"><div class="d num">' + esc(c.code) +
+      '</div><div class="muted">A classmate types this to introduce you to the person they know.</div></div></div>';
+    html += '<div class="card conn stack"><div class="label">The person you know</div><div class="bigname">' + esc(k.name) + '</div><div class="muted">' + esc(k.title) + " at " + esc(k.giantName) +
+      "</div><p>They are the <b>" + esc(doorName(k.door).toLowerCase()) + "</b> door at " + esc(k.giantName) + ". They also told you what the company cares about most: <b>“" + esc(msg(c.hint)) + "”</b>.</p>" +
+      "<p>You can introduce <b>" + left + (left === 1 ? " more start-up" : " more start-ups") + "</b>. Choose well: you score " + pts(P.vouch) + " for each one that goes on to sign.</p>" +
+      (left > 0 && st.game.phase !== "locked" ? '<div class="inline"><input class="field deskinput num" id="vouchInput" style="font-size:1.6em;width:110px" inputmode="numeric" maxlength="2" autocomplete="off" placeholder="--" value="' + esc(S.typed) + '">' +
+        '<button class="btn primary" data-act="vouch"' + (S.busy ? " disabled" : "") + ">Introduce them</button></div>" : "") + "</div>";
+    if (st.given.length) {
+      html += '<div class="card stack"><div class="label">You introduced</div>' + st.given.map(function (i) {
+        return '<div class="row"><span><b>' + esc(i.to_name) + '</b> <span class="muted">' + esc(i.to_org) + "</span></span>" +
+          '<span class="chip ' + (i.to_signed ? "good" : i.used ? "plain" : "grey") + '">' + (i.to_signed ? "Signed" : i.used ? "Used it" : "Not used yet") + "</span></div>";
+      }).join("") + "</div>";
+    }
+    if (st.intros.length) {
+      html += '<div class="card stack"><div class="label">Introductions you received</div>' + st.intros.map(function (i) {
+        var w = person(i.giant, i.door), usable = !i.used && i.giant === s.giant;
+        return '<div class="row"><span><b>' + esc(i.from_name) + '</b> <span class="muted">to ' + esc(w.name) + ", " + esc(doorName(i.door).toLowerCase()) + " at " + esc(giant(i.giant).name) + "</span></span>" +
+          '<span class="chip ' + (i.used ? "grey" : usable ? "good" : "bad") + '">' + (i.used ? "Used" : usable ? (i.door === s.progress ? "Ready" : i.door > s.progress ? "For later" : "Too late") : "Wrong company") + "</span></div>";
+      }).join("") + "</div>";
+    }
+    return html;
+  }
+
+  // ---------- after a round, and at the end ----------
+  function roundDone(st) {
+    var s = st.me.state, g = st.game, G = giant(s.giant), sc = myScore(st);
+    var hist = st.moves.filter(function (m) { return m.round === g.round; }), opened = hist.filter(function (m) { return m.success; }).length;
+    var final = g.phase === "locked", head, text;
+    if (!s.giant) { head = "You never chose a target."; text = "A campaign with no target reaches nobody."; }
+    else if (s.rank != null && s.rank <= st.game.rules.slots) { head = "You landed " + G.name + "."; text = "You were the " + ordinal(s.rank) + " start-up to get the signature."; }
+    else if (s.rank != null) { head = "Signed, but too late."; text = G.name + " had already signed " + st.game.rules.slots + " start-ups before you."; }
+    else if (final) { head = "You reached " + (s.progress === 0 ? "nobody" : doorName(s.progress - 1).toLowerCase() + "’s yes") + "."; text = s.progress === 0 ? "Nobody inside " + G.name + " ever answered." : "The next door, " + doorName(s.progress).toLowerCase() + ", stayed shut."; }
+    else { head = opened ? opened + (opened === 1 ? " door opened" : " doors opened") + " this round." : "No door opened this round."; text = "Next: " + person(s.giant, s.progress).name + ", " + person(s.giant, s.progress).title + "."; }
+    var html = '<div class="card stack" style="text-align:center"><div class="label">' + (final ? "Final result" : "Round " + g.round + " of " + g.rounds) + '</div><div class="bigname">' + esc(head) + "</div>" +
+      (s.giant ? doorsRow(st, false) : "") + "<p>" + esc(text) + "</p>" +
+      '<div class="points num">' + sc.total + '</div><div class="label">points</div>' +
+      (sc.parts.length ? '<table class="breakdown">' + sc.parts.map(function (p) { return "<tr><td>" + esc(p.label) + '</td><td class="num">' + pts(p.value) + "</td></tr>"; }).join("") + "</table>" : "") + "</div>";
+    if (final) html += '<div class="card note" style="text-align:center"><div class="bigname">Eyes on the big screen.</div><p>Which moves opened which doors in this room?</p></div>';
+    return html;
   }
 
   // ---------- page ----------
@@ -194,103 +191,66 @@
     }
     if (!me.role) {
       return '<div class="hero-art"><img src="art/hero-s.jpg" alt=""></div><div class="hero"><div class="label">You are in</div><h1>' + esc(me.name) + '</h1><p class="muted">' +
-        (g.phase === "lobby" ? st.n_players + " joined so far. Keep this page open: your role appears when the host starts." : "Getting your role…") + "</p></div>";
+        (g.phase === "lobby" ? st.n_players + " joined so far. Keep this page open: your start-up appears when the host starts." : "Getting your start-up…") + "</p></div>";
     }
-    if (g.phase === "lobby" || g.phase === "briefing") {
-      return header(roleLine(me), me.card.org, g.phase === "briefing" ? "Round 1 starts in" : "") +
-        '<div class="banner paused">Read your card. Then stand up: round 1 starts soon.</div>' + roleCard(me);
-    }
-    if (g.phase === "locked") return header(roleLine(me), me.card.org, "") + result(st) + finalNote(st) + history(st);
-    if (g.phase === "reveal") {
-      return header(roleLine(me), me.card.org, g.ends_at ? "Next round in" : "") + result(st) + nextNote(st) + history(st);
-    }
-    // a round is open
-    var tabs = [["main", "Round " + g.round + " of " + g.rounds], ["card", "My card"]];
-    var tab = S.tab === "card" ? "card" : "main";
-    return header(roleLine(me), me.card.org, "Round ends in") +
+    var s = me.state, started = st.moves.length > 0;
+    if (g.phase === "locked") return header("Start-up", me.card.org, "") + roundDone(st);
+    var tabs = [["main", g.phase === "briefing" ? "Target" : g.phase === "reveal" ? "Result" : "Campaign"], ["net", "Network"]];
+    if (g.phase !== "briefing" && s.giant) tabs.push(["target", "Target"]);
+    var tab = tabs.some(function (t) { return t[0] === S.tab; }) ? S.tab : "main";
+    var body = tab === "net" ? network(st) : tab === "target" ? targetView(st, started) :
+      g.phase === "briefing" ? '<div class="banner paused" style="margin:0 0 14px;border-radius:14px">' + (s.giant && s.message ? "Ready. You can still change your mind until round 1 starts." : "Choose a company and a message before round 1.") + "</div>" + targetView(st, false) :
+      g.phase === "reveal" ? roundDone(st) : campaign(st);
+    return header("Start-up", me.card.org, g.phase === "briefing" ? "Round 1 starts in" : g.phase === "reveal" ? (g.ends_at ? "Next round in" : "") : "Round " + g.round + " of " + g.rounds) +
       '<div class="tabs">' + tabs.map(function (t) {
         return '<button class="btn' + (tab === t[0] ? " on" : "") + '" data-act="tab" data-id="' + t[0] + '">' + esc(t[1]) + "</button>";
-      }).join("") + "</div>" + (tab === "card" ? roleCard(me) : me.role === "seller" ? sellerRound(st) : buyerRound(st));
+      }).join("") + "</div>" + body;
   }
 
   function render(force) {
     var st = S.st;
-    var key = JSON.stringify([st ? [st.game, st.me, st.mine, st.closed, st.sellers, st.n_players] : st, S.tab, S.busy, S.code]);
+    var key = JSON.stringify([st ? [st.game, st.me, st.intros, st.given, st.giants, st.moves.length, st.priority, st.n_players] : st, S.tab, S.busy, S.code, S.last]);
     if (!force && key === S.key) return;
     // Do not wipe a text field the player is typing in.
     var active = document.activeElement;
-    if (!force && active && (active.id === "name" || active.id === "code" || active.id === "codeInput")) { S.key = ""; return; }
+    if (!force && active && (active.id === "name" || active.id === "code" || active.id === "vouchInput")) { S.key = ""; return; }
     S.key = key;
+    var y = window.scrollY;
     app.innerHTML = view();
+    window.scrollTo(0, y);
   }
-
-  // ---------- sheets ----------
-  function renderSheet() {
-    var sh = S.sheet, st = S.st;
-    if (!sh || !st || !st.me) { sheetEl.__html = sheetEl.innerHTML = ""; return; }
-    var me = st.me, g = st.game, rule = E.roundRule(cfg, g.round), html = "";
-    if (sh.type === "sign") {
-      var s = st.sellers.filter(function (x) { return x.code === sh.code; })[0];
-      if (!s) { S.sheet = null; sheetEl.__html = sheetEl.innerHTML = ""; return; }
-      var done = E.closedRounds(g), rec = E.record(s.id, st.closed, done);
-      var own = st.closed.filter(function (d) { return d.buyer_id === me.id && d.seller_id === s.id; });
-      var k = (me.card.knows || []).filter(function (x) { return x.id === s.id; })[0];
-      html = '<div class="label">Deal code ' + esc(s.code) + '</div><div class="bigname">' + esc(s.org) + '</div><div class="muted">' + esc(s.name) + " · " + esc(s.tagline) + '</div><div class="stack" style="margin-top:14px">' +
-        (s.busy ? '<div class="check no">Already signed by another buyer this round.</div>' : "") +
-        own.map(function (d) { return '<div class="check ' + (d.delivered ? "ok" : "no") + '">' + (d.delivered ? "✓ Delivered for you" : "✗ Failed you") + " in round " + d.round + "</div>"; }).join("") +
-        (rule.intros && k ? '<div class="check ' + (k.ready ? "ok" : "no") + '">' + (k.ready ? "✓ You know them: their product works" : "✗ You know them: their product is not ready") + "</div>" : "") +
-        (rule.proof ? '<div class="check ' + (s.proof ? "ok" : "") + '">' + (s.proof ? "✓ Proof on file: a reference customer" : "No proof on file") + "</div>" : "") +
-        (rule.record ? (rec.delivered.length ? '<div class="check ok">✓ Delivered in ' + rec.delivered.length + (rec.delivered.length === 1 ? " earlier round" : " earlier rounds") + "</div>" : "") +
-          (rec.failed.length ? '<div class="check no">✗ Failed to deliver in ' + rec.failed.length + (rec.failed.length === 1 ? " earlier round" : " earlier rounds") + "</div>" : "") +
-          (!rec.delivered.length && !rec.failed.length ? '<div class="check">No record: nobody has signed them yet</div>' : "") : "") +
-        (!rule.proof ? '<p class="muted">This round you have only their word.</p>' : "") + "</div>" +
-        '<div class="stack" style="margin-top:16px">' +
-        '<button class="btn good block" data-act="sign" data-id="full"' + (S.busy || s.busy ? " disabled" : "") + ">Sign the full deal · " + pts(P.fullWin) + " or " + pts(P.fullLose) + "</button>" +
-        (rule.pilot ? '<button class="btn primary block" data-act="sign" data-id="pilot"' + (S.busy || s.busy ? " disabled" : "") + ">Sign a pilot · " + pts(P.pilotWin) + " or " + pts(P.pilotLose) + "</button>" : "") +
-        '<button class="btn block" data-act="sheet-close">Go back</button><p class="muted" style="text-align:center">This is your one decision for the round.</p></div>';
-    } else if (sh.type === "stay") {
-      html = '<div class="label">Your decision for round ' + g.round + '</div><div class="bigname">Stay with ' + esc(me.card.incumbent) + "?</div>" +
-        '<p style="margin-top:8px">A safe ' + pts(P.stay) + ". You cannot sign a start-up this round after this.</p>" +
-        '<div class="stack" style="margin-top:16px"><button class="btn primary block" data-act="stay"' + (S.busy ? " disabled" : "") + ">Yes, stay this round</button>" +
-        '<button class="btn block" data-act="sheet-close">Go back</button></div>';
-    }
-    // Only touch the page when something changed, so a tap is never lost to a redraw.
-    var out = '<div class="panel">' + html + "</div>";
-    if (sheetEl.__html !== out) { sheetEl.__html = out; sheetEl.innerHTML = out; }
-  }
-  function openSheet(sh) { S.sheet = sh; renderSheet(); }
-  function closeSheet() { S.sheet = null; sheetEl.__html = sheetEl.innerHTML = ""; }
 
   var toastTimer = null;
-  function toast(msg) {
-    toastEl.textContent = msg;
+  function toast(msgText) {
+    toastEl.textContent = msgText;
     clearTimeout(toastTimer);
     toastTimer = setTimeout(function () { toastEl.textContent = ""; }, 3500);
   }
 
   // Run a player action, then refresh.
-  function act(promiseFn, after, keepOnError) {
+  function act(promiseFn, after) {
     if (S.busy) return;
-    S.busy = true; render(true); renderSheet();
+    S.busy = true; render(true);
     promiseFn().then(function (r) { if (after) after(r); return true; }, function (e) { toast(B2B.errorText(e)); return false; })
-      .then(function (ok) {
-        S.busy = false;
-        if (ok || !keepOnError) closeSheet(); else renderSheet();
-        render(true); refresh();
-      });
+      .then(function () { S.busy = false; render(true); refresh(); });
   }
-  function lookUp(code) {
-    var st = S.st;
-    if (!/^\d{2}$/.test(code || "")) return toast("A deal code has 2 digits. Ask the start-up for it.");
-    if (!st.sellers.some(function (s) { return s.code === code; })) return toast(B2B.errorText({ code: "bad_code" }));
-    openSheet({ type: "sign", code: code });
+  // Say what a move did, in words.
+  function report(r, key, st) {
+    var s = st.me.state, G = giant(s.giant), t = moveText(key).title;
+    if (key === "content") return { good: true, text: "<b>Published.</b> People inside " + esc(G.name) + " have now heard of you: every move is " + st.game.rules.awareBoost + "% more likely to work." };
+    if (key === "research") return { good: true, text: "<b>Research done.</b> You now know what " + esc(G.name) + " cares about most." };
+    var who = person(s.giant, r.door);
+    if (!r.success) return { good: false, text: "<b>" + esc(t) + " did not work.</b> " + esc(who.name) + " did not say yes. It had a " + r.odds + "% chance." };
+    if (r.rank != null) return { good: true, text: "<b>Signed.</b> " + esc(who.name) + " said yes. You are the " + ordinal(r.rank) + " start-up into " + esc(G.name) + "." };
+    var next = person(s.giant, r.progress);
+    return { good: true, text: "<b>" + esc(t) + " worked.</b> " + esc(who.name) + " said yes. Next door: " + esc(next.name) + ", " + esc(next.title) + "." };
   }
 
   // ---------- events ----------
   document.addEventListener("click", function (ev) {
     var el = ev.target.closest("[data-act]");
     if (!el || el.disabled) return;
-    var a = el.getAttribute("data-act"), id = el.getAttribute("data-id"), sh = S.sheet;
+    var a = el.getAttribute("data-act"), id = el.getAttribute("data-id"), st = S.st;
     if (a === "setcode") {
       var code = (document.getElementById("code").value || "").toUpperCase().replace(/[^A-Z]/g, "");
       if (code.length !== 4) return toast("The code has 4 letters.");
@@ -302,30 +262,31 @@
       act(function () { return api.join(S.code, name, S.token, false); });
     } else if (a === "tab") {
       S.tab = id; render(true); window.scrollTo(0, 0);
-    } else if (a === "sheet-close") {
-      closeSheet();
-    } else if (a === "lookup") {
-      lookUp(S.typed);
-    } else if (a === "look") {
-      lookUp(id);
-    } else if (a === "sign") {
-      act(function () { return api.sign(S.code, S.token, sh.code, id); }, function () { S.typed = ""; toast("Signed. Wait for the reveal."); }, true);
-    } else if (a === "stay-open") {
-      openSheet({ type: "stay" });
-    } else if (a === "stay") {
-      act(function () { return api.sign(S.code, S.token, null, "stay"); }, function () { S.typed = ""; });
+    } else if (a === "giant") {
+      act(function () { return api.target(S.code, S.token, id, null); });
+    } else if (a === "message") {
+      act(function () { return api.target(S.code, S.token, null, id); });
+    } else if (a === "move") {
+      var intro = el.getAttribute("data-intro");
+      act(function () { return api.move(S.code, S.token, id, intro || null); }, function (r) {
+        S.last = report(r, id, st);
+        if (navigator.vibrate) navigator.vibrate(r.success === false ? 40 : [60, 40, 60]);
+      });
+    } else if (a === "vouch") {
+      var v = S.typed;
+      if (!/^\d{2}$/.test(v || "")) return toast("A code has 2 digits. Ask them to show you their phone.");
+      act(function () { return api.vouch(S.code, S.token, v); }, function (r) { S.typed = ""; toast("Done. " + (r.to_name || "They") + " can now use your introduction."); });
     }
   });
   document.addEventListener("input", function (ev) {
-    if (ev.target.id !== "codeInput") return;
+    if (ev.target.id !== "vouchInput") return;
     S.typed = ev.target.value = ev.target.value.replace(/\D/g, "").slice(0, 2);
   });
   document.addEventListener("keydown", function (ev) {
     if (ev.key !== "Enter") return;
-    var btn = ev.target.id === "name" ? '[data-act="join"]' : ev.target.id === "code" ? '[data-act="setcode"]' : ev.target.id === "codeInput" ? '[data-act="lookup"]' : null;
+    var btn = ev.target.id === "name" ? '[data-act="join"]' : ev.target.id === "code" ? '[data-act="setcode"]' : ev.target.id === "vouchInput" ? '[data-act="vouch"]' : null;
     if (btn) { ev.target.blur(); document.querySelector(btn).click(); }
   });
-  sheetEl.addEventListener("click", function (ev) { if (ev.target === sheetEl) closeSheet(); });
 
   // ---------- start ----------
   if (S.code) setCode(S.code);
@@ -339,19 +300,22 @@
         if (st) ui.syncClock(st.now);
         var before = S.st && S.st.game ? S.st.game.phase + S.st.game.round : "";
         S.st = st;
-        // A sheet is only valid while a round is open; a new round starts with a clean screen.
-        if (S.sheet && (!st || !st.me || st.game.phase !== "open")) closeSheet();
+        // A new round starts on the Campaign tab, with the last result cleared.
         if (st && st.game && before && before !== st.game.phase + st.game.round) {
-          S.typed = ""; S.tab = "main"; window.scrollTo(0, 0);
+          S.tab = "main"; if (st.game.phase === "open") S.last = null;
           if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+          window.scrollTo(0, 0);
           render(true);
         }
-        if (S.sheet && !S.busy) renderSheet();
-        // Tell a start-up the moment a buyer signs it.
-        if (st && st.me && st.me.role === "seller") {
-          var id = st.mine ? st.mine.id : null;
-          if (id && id !== S.signedBy) { toast("A buyer just signed you."); if (navigator.vibrate) navigator.vibrate(120); }
-          S.signedBy = id;
+        // Tell a player the moment a classmate introduces them.
+        if (st && st.me && st.me.role) {
+          var n = st.intros.length;
+          if (S.seenIntros != null && n > S.seenIntros) {
+            var i = st.intros[st.intros.length - 1];
+            toast(i.from_name + " just introduced you to " + person(i.giant, i.door).name + ".");
+            if (navigator.vibrate) navigator.vibrate(120);
+          }
+          S.seenIntros = n;
         }
         render();
       });

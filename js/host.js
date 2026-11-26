@@ -20,7 +20,8 @@
     return u.origin + u.pathname + "?g=" + H.sess.code;
   }
   function modeName() { return B2B.mode === "online" ? "Live (Supabase)" : "Offline on this laptop"; }
-  function pts(n) { return (n > 0 ? "+" : n < 0 ? "−" : "") + Math.abs(n); }
+  function giantName(id) { var g = (H.cards.giants || []).filter(function (x) { return x.id === id; })[0]; return g ? g.name : id || ""; }
+  function doorName(d) { return (H.cards.doors || [])[d] || "door " + (d + 1); }
 
   // ---------- setup ----------
   function setupView() {
@@ -49,71 +50,71 @@
       '<label class="inline"><input type="checkbox" id="autobots" checked> Simulated players act on their own</label>' +
       '<label class="inline">Test speed <select class="field" id="speed" style="width:auto">' + B2B.speed.options.map(function (n) { return '<option value="' + n + '"' + (n === B2B.speed.chosen(H.sess.code) ? " selected" : "") + ">" + (n === 1 ? "1× (as in class)" : n + "×") + "</option>"; }).join("") + '</select></label>' +
       '<p class="muted" id="speednote"></p>' +
-      '<p class="muted">Simulated buyers hear a few pitches each round and decide like a cautious class would. Results that include them are labelled "Simulated run" on the projector.</p></div>' +
+      '<p class="muted">Simulated start-ups run their own campaigns: about a third only send cold emails, the rest market first, and some introduce each other. Results that include them are labelled "Simulated run" on the projector.</p></div>' +
       '<div class="card stack"><h2>Data</h2><div class="inline"><button class="btn" data-act="export">Download CSV files</button><button class="btn danger" data-act="reset">Reset game</button></div>' +
-      '<p class="muted">Three files: every decision of every round, every player, and the event log. Reset removes all players and results but keeps the game code.</p></div></div></div>' +
+      '<p class="muted">Three files: every marketing move, every player, and the event log. Reset removes all players and results but keeps the game code.</p></div></div></div>' +
       '<div class="card" id="roster" style="margin-top:14px"></div>';
   }
 
   function statusView(hs) {
-    var g = hs.game, Pl = hs.players;
-    var sellers = Pl.filter(function (p) { return p.role === "seller"; }), buyers = Pl.filter(function (p) { return p.role === "buyer"; });
-    var now = hs.deals.filter(function (d) { return d.round === g.round; });
+    var g = hs.game, Pl = hs.players, R = g.rules;
+    var startups = Pl.filter(function (p) { return p.role; });
+    var now = hs.moves.filter(function (m) { return m.round === g.round; });
     var names = { lobby: "Lobby", briefing: "Briefing", open: "Round " + g.round + " of " + g.rounds, reveal: "Reveal · round " + g.round, locked: "Game over" };
     function btn(act, label, cls, id, disabled) {
       return '<button class="btn ' + (cls || "") + '" data-act="' + act + '"' + (id ? ' data-id="' + id + '"' : "") + (disabled ? " disabled" : "") + ">" + label + "</button>";
     }
     var controls = "";
-    if (g.phase === "lobby") controls = btn("start", "Start: deal the role cards", "primary", "", Pl.length < 2);
+    if (g.phase === "lobby") controls = btn("start", "Start: deal the start-up cards", "primary", "", Pl.length < 2);
     else if (g.phase === "briefing") controls = btn("open", "Start round 1 now", "primary");
     else if (g.phase === "open") controls = btn("extend", "+" + cfg.extendSeconds + " s") + btn("close", "Close the round now", "primary");
     else if (g.phase === "reveal") controls = btn("open", "Start round " + (g.round + 1) + " now", "primary") + (g.ends_at ? btn("hold", "Hold: wait for me") + btn("extend", "+" + cfg.extendSeconds + " s") : "");
     else {
-      controls = [["closed", "Final round"], ["quick", "Round by round"], ["full1", "Dashboard 1: what opened the door"], ["full2", "Dashboard 2: who paid, who won"]]
+      controls = [["closed", "What opened the doors"], ["quick", "The room in one look"], ["full1", "Dashboard 1: what worked"], ["full2", "Dashboard 2: who got in"]]
         .map(function (v) { return btn("view", v[1], g.view === v[0] ? "on" : "", v[0]); }).join("");
     }
-    var hint = g.phase === "lobby" ? (Pl.length < 2 ? "Waiting for players. At least 2 are needed." : "Press Start when everyone has joined. Late joiners still get a role.") :
-      g.phase === "briefing" ? "Players are reading their cards. Round 1 starts by itself when the clock reaches zero." :
-      g.phase === "open" ? "The round closes by itself at zero. Buyers who have not decided stay with their supplier." :
-      g.phase === "reveal" ? (g.ends_at ? "The projector shows who signed and who got burned. The next round starts by itself at zero; press Hold if you need longer." : "On hold. Press the button when you are ready for the next round.") :
+    var hint = g.phase === "lobby" ? (Pl.length < 2 ? "Waiting for players. At least 2 are needed." : "Press Start when everyone has joined. Late joiners still get a start-up.") :
+      g.phase === "briefing" ? "Players are reading their cards and choosing a company to go after. Round 1 starts by itself when the clock reaches zero." :
+      g.phase === "open" ? "The round closes by itself at zero. Budget that is not spent is lost." :
+      g.phase === "reveal" ? (g.ends_at ? "The projector shows which moves worked. The next round starts by itself at zero; press Hold if you need longer." : "On hold. Press the button when you are ready for the next round.") :
       "These buttons set the stand-alone projector screen. The slides show results on their own.";
+    var priorities = R ? '<p class="muted">What each company cares about most (hidden from players): ' + Object.keys(R.giants).map(function (id) {
+      return "<b>" + esc(giantName(id)) + "</b> " + esc(String((H.cards.messages || {})[R.giants[id].priority] || R.giants[id].priority).toLowerCase());
+    }).join(" · ") + "</p>" : "";
     return '<div class="row"><div><div class="label">Phase</div><div class="phase">' + names[g.phase] + '</div></div><div style="text-align:right"><div class="label">Clock</div><div class="phase num" data-clock></div></div></div>' +
-      '<div class="chips"><span class="chip plain num">' + Pl.length + ' players</span><span class="chip plain num">' + sellers.length + " start-ups (" + sellers.filter(function (s) { return !s.card.ready; }).length + " not ready) · " + buyers.length + " buyers</span>" +
-      (g.phase === "open" || g.phase === "reveal" || g.phase === "locked" ? '<span class="chip plain num">This round: ' + now.length + " of " + buyers.length + " decided, " + now.filter(function (d) { return d.kind !== "stay"; }).length + " signed</span>" : "") +
+      '<div class="chips"><span class="chip plain num">' + Pl.length + " players</span>" +
+      (R ? '<span class="chip plain num">' + startups.filter(function (p) { return p.state.giant; }).length + " of " + startups.length + " chose a target</span>" +
+           '<span class="chip plain num">' + startups.filter(function (p) { return p.state.rank != null; }).length + " signed</span>" +
+           '<span class="chip plain num">' + hs.intros.length + " introductions</span>" : "") +
+      (g.phase === "open" || g.phase === "reveal" ? '<span class="chip plain num">This round: ' + now.length + " moves, " + now.filter(function (m) { return m.success; }).length + " doors opened</span>" : "") +
       (B2B.speed.of(H.sess.code, Pl) > 1 ? '<span class="chip sim">Test speed ' + B2B.speed.of(H.sess.code, Pl) + "×</span>" : "") + "</div>" +
-      '<p class="muted">' + hint + '</p><div class="controls">' + controls + "</div>" +
+      '<p class="muted">' + hint + "</p>" + priorities + '<div class="controls">' + controls + "</div>" +
       (H.msg ? '<div class="card warn">' + esc(H.msg) + "</div>" : "");
   }
 
   function rosterView(hs) {
     if (!hs.players.length) return "<h2>Players</h2><p class=\"muted\">Nobody has joined yet.</p>";
-    var g = hs.game, upTo = Math.max(E.closedRounds(g), g.phase === "open" ? g.round : 0), byId = {};
-    hs.players.forEach(function (p) { byId[p.id] = p; });
-    var rows = hs.players.slice().sort(function (a, b) { return (a.role || "z").localeCompare(b.role || "z") || a.name.localeCompare(b.name); });
-    var cols = [];
-    for (var r = 1; r <= upTo; r++) cols.push(r);
-    function cellFor(p, r) {
-      var d = E.rowOf(p, hs.deals, r);
-      if (p.role === "buyer") {
-        if (!d) return r <= E.closedRounds(g) ? '<span class="muted">stayed</span>' : "";
-        if (d.kind === "stay") return "stayed";
-        var s = byId[d.seller_id];
-        return (d.kind === "pilot" ? "pilot: " : "full: ") + esc(s ? s.card.org : "?") + (d.delivered ? "" : ' <span class="chip bad">burned</span>');
-      }
-      if (!d) return "";
-      var b = byId[d.buyer_id];
-      return (d.kind === "pilot" ? "pilot: " : "full: ") + esc(b ? b.name : "?");
+    var g = hs.game, R = g.rules, slots = R ? R.slots : cfg.game.slots;
+    var startups = hs.players.filter(function (p) { return p.role; });
+    var rows = hs.players.slice().sort(function (a, b) { return (a.role ? 0 : 1) - (b.role ? 0 : 1) || a.name.localeCompare(b.name); });
+    if (!R) {
+      return "<h2>Players</h2><table><tr><th>Name</th></tr>" + rows.map(function (p) {
+        return "<tr><td>" + esc(p.name) + (p.is_bot ? ' <span class="chip grey">sim</span>' : "") + "</td></tr>";
+      }).join("") + "</table>";
     }
-    return "<h2>Players</h2>" + (rows.some(function (p) { return p.role; }) ? '<p class="muted">This table shows every secret: which start-ups are not ready, and every deal code. Keep this panel off the projector.</p>' : "") +
-      "<table><tr><th>Name</th><th>Role</th><th>Code</th><th>Organisation</th><th>Secret</th>" + cols.map(function (r) { return "<th>Round " + r + "</th>"; }).join("") + "<th>Points</th></tr>" +
+    return "<h2>Players</h2>" + '<p class="muted">This table shows who knows whom and which message is the right one. Keep this panel off the projector.</p>' +
+      "<table><tr><th>Name</th><th>Code</th><th>Start-up</th><th>Knows</th><th>Going after</th><th>Message</th><th>Doors</th><th>Gave</th><th>Got</th><th>Points</th></tr>" +
       rows.map(function (p) {
-        var c = p.card || {};
-        var secret = p.role === "seller" ? (c.ready ? (c.proof ? "works · has proof" : "works · no proof") : '<span class="chip bad">not ready</span>') :
-          p.role === "buyer" ? "knows " + ((c.knows || []).map(function (k) { return esc(k.name) + (k.ready ? " ✓" : " ✗"); }).join(", ") || "nobody") : "";
-        return "<tr><td>" + esc(p.name) + (p.is_bot ? ' <span class="chip grey">sim</span>' : "") + "</td><td>" + esc(p.role === "seller" ? "start-up" : p.role || "waiting") + "</td><td>" +
-          (c.code ? '<span class="deskpill num">' + esc(c.code) + "</span>" : "") + "</td><td>" + esc(c.org || "") + "</td><td>" + secret + "</td>" +
-          cols.map(function (r) { return "<td>" + (p.role ? cellFor(p, r) : "") + "</td>"; }).join("") +
-          '<td class="num">' + (p.role && E.closedRounds(g) ? pts(E.score(p, hs.deals, E.closedRounds(g), cfg).total) : "") + "</td></tr>";
+        var c = p.card || {}, s = p.state || {}, k = c.contact;
+        if (!p.role) return "<tr><td>" + esc(p.name) + (p.is_bot ? ' <span class="chip grey">sim</span>' : "") + '</td><td colspan="9" class="muted">waiting for a start-up</td></tr>';
+        var right = s.giant && s.message ? R.giants[s.giant].priority === s.message : null;
+        var doors = s.rank != null ? '<span class="chip ' + (s.rank <= slots ? "good" : "grey") + '">signed ' + (s.rank <= slots ? "#" + s.rank : "too late") + "</span>"
+          : s.giant ? s.progress + " of " + E.DOORS + ' <span class="muted">at ' + esc(doorName(s.progress).toLowerCase()) + "</span>" : "";
+        return "<tr><td>" + esc(p.name) + (p.is_bot ? ' <span class="chip grey">sim</span>' : "") + '</td><td><span class="deskpill num">' + esc(c.code || "") + "</span></td><td>" + esc(c.org || "") + "</td><td>" +
+          (k ? esc(doorName(k.door).toLowerCase()) + " at " + esc(k.giantName || giantName(k.giant)) : "") + "</td><td>" + (s.giant ? esc(giantName(s.giant)) + (k && k.giant === s.giant ? " ✓" : "") : '<span class="muted">not chosen</span>') + "</td><td>" +
+          (s.message ? esc(s.message) + (right ? " ✓" : " ✗") : "") + "</td><td>" + doors + '</td><td class="num">' +
+          hs.intros.filter(function (i) { return i.from_id === p.id; }).length + '</td><td class="num">' + hs.intros.filter(function (i) { return i.to_id === p.id; }).length +
+          '</td><td class="num">' + (g.round ? E.score(p, startups, hs.intros, cfg, slots).total : "") + "</td></tr>";
       }).join("") + "</table>";
   }
 
@@ -122,7 +123,7 @@
     if (!H.shell) { root.innerHTML = shellView(); H.shell = true; H.key = ""; }
     var hs = H.hs;
     if (!hs) return;
-    var key = JSON.stringify([hs.game, hs.players, hs.deals, H.msg]);
+    var key = JSON.stringify([hs.game, hs.players, hs.moves.length, hs.intros, H.msg]);
     if (key === H.key) return;
     H.key = key;
     document.getElementById("status").innerHTML = statusView(hs);
@@ -180,7 +181,7 @@
     } else if (a === "open") {
       run(B2B.driver.openRound(ctx(), H.hs));
     } else if (a === "close") {
-      if (window.confirm("Close round " + H.hs.game.round + " now? Buyers who have not decided stay with their supplier.")) run(B2B.driver.closeRound(ctx(), H.hs));
+      if (window.confirm("Close round " + H.hs.game.round + " now? Budget that is not spent is lost.")) run(B2B.driver.closeRound(ctx(), H.hs));
     } else if (a === "hold") {
       run(api.host(H.sess.code, H.sess.pin, "hold"));
     } else if (a === "extend") {
@@ -196,10 +197,10 @@
       var n = Math.max(1, Math.min(60, Number(document.getElementById("botn").value) || 0));
       run(B2B.bots.add(ctx(), n, H.hs.players.map(function (p) { return p.name; })));
     } else if (a === "export") {
-      var full = { players: H.hs.players, deals: H.hs.deals }, base = "enterprise-deal-" + H.sess.code + "-";
+      var full = { players: H.hs.players, moves: H.hs.moves, intros: H.hs.intros, rules: H.hs.game.rules || {} }, base = "enterprise-deal-" + H.sess.code + "-";
       api.hostEvents(H.sess.code, H.sess.pin).then(function (events) {
-        ui.download(base + "decisions.csv", B2B.exporter.decisionsCsv(full, cfg));
-        setTimeout(function () { ui.download(base + "players.csv", B2B.exporter.playersCsv(full, cfg)); }, 400);
+        ui.download(base + "moves.csv", B2B.exporter.movesCsv(full, H.cards));
+        setTimeout(function () { ui.download(base + "players.csv", B2B.exporter.playersCsv(full, H.cards, cfg)); }, 400);
         setTimeout(function () { ui.download(base + "events.csv", B2B.exporter.eventsCsv(events, full.players)); }, 800);
       }, function (e) { H.msg = B2B.errorText(e); H.key = ""; render(); });
     }
@@ -209,7 +210,6 @@
   ui.loadJson("data/cards.json").then(function (cards) {
     H.cards = cards;
     H.problems = E.validateCards(cards);
-    if (!H.problems.length && cards.rounds.length !== E.roundCount(cfg)) H.problems.push('"rounds" in cards.json needs one entry for each of the ' + E.roundCount(cfg) + " rounds set in js/config.js.");
     render();
     ui.tickClocks(function () { return H.hs && H.hs.game; });
     refresh = ui.loop(function () {

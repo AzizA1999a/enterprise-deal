@@ -1,37 +1,174 @@
 {
-  "_readme": "DRAFT wording for the game. Rewrite freely. Every company name here is invented as a placeholder. Keep each id unique. A seller card needs id, name, tagline. A buyer card needs id, enterprise, title (need and incumbent.name are optional). 'rounds' must have one entry per round in js/config.js (game.rounds): 'title' is the round's name, 'new' is what changes (shown on the projector), 'buyer' and 'seller' are the one-line tips on the phones.",
+  "_readme": "DRAFT wording for the game. Rewrite freely. Every company and person here is invented as a placeholder. 'giants' are the large companies the start-ups try to get into: each needs an id, a name, a need, and four 'people' in door order (manager, security, procurement, executive). 'doors' are the short labels for those four doors. 'messages' are the three things a start-up can lead with; which one each giant cares about is drawn at random every game. 'moves' holds the name and one-line description of each marketing move (what a move costs and how often it works is in js/config.js). 'sellers' are the start-ups: id, name, tagline.",
   "rules": [
-    "Buyers: each round, stay with the supplier you have (safe), or sign a start-up. If it delivers you win big. If it fails, you answer for it.",
-    "Start-ups: get a buyer to type your deal code. Some of you have a product that is not ready. Nobody else knows which.",
-    "Three rounds of two minutes. After each one, the room sees who signed and who got burned."
+    "You run a start-up. Pick one large company and get inside it: four people have to say yes.",
+    "Each round you have a small marketing budget. Every move shows what it costs and its chance of opening the next door.",
+    "Your network is in this room. Everyone knows one person inside one company. Find the classmate who knows yours."
   ],
-  "rounds": [
+  "doors": [
+    "Manager",
+    "Security",
+    "Procurement",
+    "Executive"
+  ],
+  "doorWho": [
+    "the manager who has the problem",
+    "the security reviewer",
+    "procurement",
+    "the executive who signs"
+  ],
+  "messages": {
+    "cost": "It saves you money",
+    "risk": "It lowers your risk",
+    "speed": "It gets you there faster"
+  },
+  "moves": {
+    "cold": {
+      "title": "Cold outreach",
+      "sub": "An email to someone who has never heard of you"
+    },
+    "content": {
+      "title": "Publish a case study",
+      "sub": "People inside start to know your name"
+    },
+    "research": {
+      "title": "Research the account",
+      "sub": "Find out which message this company cares about"
+    },
+    "intro": {
+      "title": "Use an introduction",
+      "sub": "Someone they trust vouches for you"
+    },
+    "proof": {
+      "title": "Show proof",
+      "sub": "A reference customer and a security certificate"
+    },
+    "pilot": {
+      "title": "Offer a small pilot",
+      "sub": "A first step the executive can point to"
+    },
+    "partner": {
+      "title": "Go in with a partner",
+      "sub": "A supplier they have already approved"
+    }
+  },
+  "giants": [
     {
-      "title": "Words only",
-      "new": "Nothing but the pitch. Nobody can check anything.",
-      "buyer": "You cannot check anything. Would you bet on a pitch?",
-      "seller": "All you have is your pitch. Get a buyer to type your deal code."
+      "id": "atlas",
+      "name": "Atlas Freight",
+      "need": "Deliveries arrive late and nobody can say why",
+      "people": [
+        {
+          "name": "Dana Whitfield",
+          "title": "Operations manager"
+        },
+        {
+          "name": "Sara Chen",
+          "title": "Head of security"
+        },
+        {
+          "name": "Marcus Bell",
+          "title": "Procurement lead"
+        },
+        {
+          "name": "Elena Novak",
+          "title": "Chief operating officer"
+        }
+      ]
     },
     {
-      "title": "Proof, and a small first step",
-      "new": "A start-up with a reference customer can now prove it. And buyers may sign a small pilot instead of the full deal.",
-      "buyer": "Type a deal code to see if that start-up has proof. Not sure? Sign a pilot: less to win, far less to lose.",
-      "seller": "If you have proof, buyers see it when they type your code. If you do not, offer a pilot."
+      "id": "meridian",
+      "name": "Meridian Trust Bank",
+      "need": "Month-end reports take two weeks of manual work",
+      "people": [
+        {
+          "name": "Priya Raman",
+          "title": "Finance operations manager"
+        },
+        {
+          "name": "Tom Okafor",
+          "title": "Chief information security officer"
+        },
+        {
+          "name": "Helen Brandt",
+          "title": "Head of vendor management"
+        },
+        {
+          "name": "James Adeyemi",
+          "title": "Chief financial officer"
+        }
+      ]
     },
     {
-      "title": "References and introductions",
-      "new": "Everyone can now see what each start-up did in the earlier rounds. And every buyer knows the truth about one start-up.",
-      "buyer": "Check a start-up's record before you sign. And look at who you know: you have the truth about one start-up.",
-      "seller": "Your record is public now. Find the buyers who know you, and the ones you delivered for."
+      "id": "pinecrest",
+      "name": "Pinecrest Health",
+      "need": "Nurses lose an hour a shift to paperwork",
+      "people": [
+        {
+          "name": "Lucia Fernandez",
+          "title": "Nursing operations manager"
+        },
+        {
+          "name": "Daniel Kim",
+          "title": "Data protection officer"
+        },
+        {
+          "name": "Ruth Mbeki",
+          "title": "Purchasing director"
+        },
+        {
+          "name": "Andrew Hale",
+          "title": "Chief medical officer"
+        }
+      ]
+    },
+    {
+      "id": "orchard",
+      "name": "Orchard Retail Group",
+      "need": "Stores run out of the products that sell best",
+      "people": [
+        {
+          "name": "Nadia Haddad",
+          "title": "Supply planning manager"
+        },
+        {
+          "name": "Victor Lindqvist",
+          "title": "IT security lead"
+        },
+        {
+          "name": "Grace Owusu",
+          "title": "Category procurement manager"
+        },
+        {
+          "name": "Stephen Marsh",
+          "title": "Chief commercial officer"
+        }
+      ]
+    },
+    {
+      "id": "bluewater",
+      "name": "Bluewater Energy",
+      "need": "Field crews are sent to the wrong jobs",
+      "people": [
+        {
+          "name": "Hassan Qureshi",
+          "title": "Field service manager"
+        },
+        {
+          "name": "Ingrid Solberg",
+          "title": "Cyber security manager"
+        },
+        {
+          "name": "Paul Renner",
+          "title": "Strategic sourcing lead"
+        },
+        {
+          "name": "Maria Costa",
+          "title": "Chief operations officer"
+        }
+      ]
     }
   ],
-  "secret": {
-    "ready": "If a buyer signs you, you deliver.",
-    "notReady": "If a buyer signs you, you will fail to deliver. You still need the deal, so sell it anyway.",
-    "proof": "You have a reference customer. From round 2, a buyer who types your code sees that.",
-    "noProof": "You have no reference customer yet. From round 2 you can offer a pilot: a small first step is easier to say yes to."
-  },
-  "buyerRule": "Stay with your supplier and nothing can go wrong. Sign a start-up and you are the hero, or the one who answers for it.",
   "sellers": [
     {
       "id": "cy-s1",
@@ -182,188 +319,6 @@
       "id": "cs-s6",
       "name": "Lumen Assist",
       "tagline": "A support bot that speaks 40 languages"
-    }
-  ],
-  "buyers": [
-    {
-      "id": "cy-b1",
-      "enterprise": "Meridian Trust Bank",
-      "title": "Head of IT Procurement",
-      "need": "Email and identity security for 12,000 employees",
-      "incumbent": {
-        "name": "Fortress Global"
-      }
-    },
-    {
-      "id": "cy-b2",
-      "enterprise": "Corvus Airlines",
-      "title": "Director of Technology Sourcing",
-      "need": "Security monitoring across 40 airports",
-      "incumbent": {
-        "name": "IronWall Systems"
-      }
-    },
-    {
-      "id": "cy-b3",
-      "enterprise": "Halden Insurance",
-      "title": "VP Vendor Management",
-      "need": "Security testing before a regulator audit",
-      "incumbent": {
-        "name": "Fortress Global"
-      }
-    },
-    {
-      "id": "cy-b4",
-      "enterprise": "Pinecrest Health",
-      "title": "Senior Procurement Manager",
-      "need": "Protecting patient records across 9 hospitals",
-      "incumbent": {
-        "name": "IronWall Systems"
-      }
-    },
-    {
-      "id": "hr-b1",
-      "enterprise": "Orchard Retail Group",
-      "title": "Head of HR Technology",
-      "need": "Scheduling for 30,000 store employees",
-      "incumbent": {
-        "name": "PeopleCore"
-      }
-    },
-    {
-      "id": "hr-b2",
-      "enterprise": "Atlas Freight",
-      "title": "HR Procurement Lead",
-      "need": "Reducing turnover among 4,000 drivers",
-      "incumbent": {
-        "name": "WorkSphere"
-      }
-    },
-    {
-      "id": "hr-b3",
-      "enterprise": "Sterling Hotels",
-      "title": "Director of People Systems",
-      "need": "Onboarding for seasonal staff",
-      "incumbent": {
-        "name": "PeopleCore"
-      }
-    },
-    {
-      "id": "hr-b4",
-      "enterprise": "Bluewater Energy",
-      "title": "Senior Category Manager",
-      "need": "Pay equity reporting for the board",
-      "incumbent": {
-        "name": "WorkSphere"
-      }
-    },
-    {
-      "id": "lg-b1",
-      "enterprise": "Granite Foods",
-      "title": "Director of Supply Chain Procurement",
-      "need": "Route planning for 800 delivery trucks",
-      "incumbent": {
-        "name": "TransCore Suite"
-      }
-    },
-    {
-      "id": "lg-b2",
-      "enterprise": "Vantage Pharma",
-      "title": "Head of Logistics Sourcing",
-      "need": "Cold chain tracking for vaccine shipments",
-      "incumbent": {
-        "name": "OmniFreight"
-      }
-    },
-    {
-      "id": "lg-b3",
-      "enterprise": "Summit Home Stores",
-      "title": "Senior Procurement Manager",
-      "need": "Warehouse efficiency before the holiday peak",
-      "incumbent": {
-        "name": "TransCore Suite"
-      }
-    },
-    {
-      "id": "lg-b4",
-      "enterprise": "Kestrel Motors",
-      "title": "VP Strategic Sourcing",
-      "need": "Visibility over inbound parts shipments",
-      "incumbent": {
-        "name": "OmniFreight"
-      }
-    },
-    {
-      "id": "fn-b1",
-      "enterprise": "Crestline Manufacturing",
-      "title": "Finance Systems Procurement Lead",
-      "need": "A faster month-end close",
-      "incumbent": {
-        "name": "Titan ERP Finance"
-      }
-    },
-    {
-      "id": "fn-b2",
-      "enterprise": "Northwind Media",
-      "title": "Director of Finance Operations",
-      "need": "Processing 40,000 supplier invoices a month",
-      "incumbent": {
-        "name": "LedgerMax"
-      }
-    },
-    {
-      "id": "fn-b3",
-      "enterprise": "Aldergate Properties",
-      "title": "Head of Procurement",
-      "need": "Cash forecasting across 60 properties",
-      "incumbent": {
-        "name": "Titan ERP Finance"
-      }
-    },
-    {
-      "id": "fn-b4",
-      "enterprise": "Juniper Health Plans",
-      "title": "Senior Sourcing Manager",
-      "need": "Audit readiness all year round",
-      "incumbent": {
-        "name": "LedgerMax"
-      }
-    },
-    {
-      "id": "cs-b1",
-      "enterprise": "Skyward Telecom",
-      "title": "Director of Customer Care Sourcing",
-      "need": "Support for 6 million subscribers",
-      "incumbent": {
-        "name": "ServiceGiant"
-      }
-    },
-    {
-      "id": "cs-b2",
-      "enterprise": "Marlow Outfitters",
-      "title": "Head of CX Procurement",
-      "need": "Handling the holiday-season support surge",
-      "incumbent": {
-        "name": "HelpForce One"
-      }
-    },
-    {
-      "id": "cs-b3",
-      "enterprise": "Unity Credit Union",
-      "title": "Vendor Risk Manager",
-      "need": "Member support under strict privacy rules",
-      "incumbent": {
-        "name": "ServiceGiant"
-      }
-    },
-    {
-      "id": "cs-b4",
-      "enterprise": "Parkside Travel",
-      "title": "Senior Procurement Manager",
-      "need": "Support in 12 languages",
-      "incumbent": {
-        "name": "HelpForce One"
-      }
     }
   ]
 }
