@@ -1,8 +1,8 @@
 /* The host control panel. This page also runs the automatic steps and the demo bots,
-   so keep it open (and visible) on the laptop for the whole game. */
+   so keep it (or the slides) open and in front on the laptop for the whole game. */
 (function () {
   "use strict";
-  var B2B = window.B2B, ui = B2B.ui, api = B2B.api, cfg = window.B2B_CONFIG, store = B2B.store;
+  var B2B = window.B2B, ui = B2B.ui, api = B2B.api, cfg = window.B2B_CONFIG, store = B2B.store, E = B2B.engine;
   var esc = ui.esc;
   var root = document.getElementById("app");
 
@@ -20,6 +20,7 @@
     return u.origin + u.pathname + "?g=" + H.sess.code;
   }
   function modeName() { return B2B.mode === "online" ? "Live (Supabase)" : "Offline on this laptop"; }
+  function pts(n) { return (n > 0 ? "+" : n < 0 ? "−" : "") + Math.abs(n); }
 
   // ---------- setup ----------
   function setupView() {
@@ -48,64 +49,71 @@
       '<label class="inline"><input type="checkbox" id="autobots" checked> Simulated players act on their own</label>' +
       '<label class="inline">Test speed <select class="field" id="speed" style="width:auto">' + B2B.speed.options.map(function (n) { return '<option value="' + n + '"' + (n === B2B.speed.chosen(H.sess.code) ? " selected" : "") + ">" + (n === 1 ? "1× (as in class)" : n + "×") + "</option>"; }).join("") + '</select></label>' +
       '<p class="muted" id="speednote"></p>' +
-      '<p class="muted">Simulated players join, negotiate and answer like a class would. Results that include them are labelled "Simulated run" on the projector.</p></div>' +
+      '<p class="muted">Simulated buyers hear a few pitches each round and decide like a cautious class would. Results that include them are labelled "Simulated run" on the projector.</p></div>' +
       '<div class="card stack"><h2>Data</h2><div class="inline"><button class="btn" data-act="export">Download CSV files</button><button class="btn danger" data-act="reset">Reset game</button></div>' +
-      '<p class="muted">Three files: every offer, every player, and the event log. Reset removes all players and offers but keeps the game code.</p></div></div></div>' +
+      '<p class="muted">Three files: every decision of every round, every player, and the event log. Reset removes all players and results but keeps the game code.</p></div></div></div>' +
       '<div class="card" id="roster" style="margin-top:14px"></div>';
   }
 
   function statusView(hs) {
-    var g = hs.game, P = hs.players;
-    var sellers = P.filter(function (p) { return p.role === "seller"; }).length;
-    var buyers = P.filter(function (p) { return p.role === "buyer"; }).length;
-    var deals = hs.offers.filter(function (o) { return o.status === "accepted"; }).length;
-    var stayed = P.filter(function (p) { return p.decision === "incumbent" || p.decision === "incumbent_default"; }).length;
-    var answered = P.filter(function (p) { return p.exit_answer; }).length;
-    var counterOffers = P.reduce(function (n, p) { return n + (p.role === "buyer" ? B2B.engine.counters(p.card).length : 0); }, 0);
-    var names = { lobby: "Lobby", briefing: "Briefing", open: "Market open", paused: "Paused", locked: "Market closed" };
+    var g = hs.game, Pl = hs.players;
+    var sellers = Pl.filter(function (p) { return p.role === "seller"; }), buyers = Pl.filter(function (p) { return p.role === "buyer"; });
+    var now = hs.deals.filter(function (d) { return d.round === g.round; });
+    var names = { lobby: "Lobby", briefing: "Briefing", open: "Round " + g.round + " of " + g.rounds, reveal: "Reveal · round " + g.round, locked: "Game over" };
     function btn(act, label, cls, id, disabled) {
       return '<button class="btn ' + (cls || "") + '" data-act="' + act + '"' + (id ? ' data-id="' + id + '"' : "") + (disabled ? " disabled" : "") + ">" + label + "</button>";
     }
     var controls = "";
-    if (g.phase === "lobby") controls = btn("start", "Start: assign roles", "primary", "", P.length < 2);
-    else if (g.phase === "briefing") controls = btn("open", "Open the market now", "primary");
-    else if (g.phase === "open") controls = btn("pause", "Pause") + btn("extend", "+1 minute") + btn("lock", "Lock the market", "primary");
-    else if (g.phase === "paused") controls = btn("resume", "Resume", "primary") + btn("extend", "+1 minute") + btn("lock", "Lock the market");
+    if (g.phase === "lobby") controls = btn("start", "Start: deal the role cards", "primary", "", Pl.length < 2);
+    else if (g.phase === "briefing") controls = btn("open", "Start round 1 now", "primary");
+    else if (g.phase === "open") controls = btn("extend", "+" + cfg.extendSeconds + " s") + btn("close", "Close the round now", "primary");
+    else if (g.phase === "reveal") controls = btn("open", "Start round " + (g.round + 1) + " now", "primary") + (g.ends_at ? btn("hold", "Hold: wait for me") + btn("extend", "+" + cfg.extendSeconds + " s") : "");
     else {
-      controls = [["closed", "Market closed"], ["quick", "Quick reveal"], ["full1", "Dashboard 1: what won"], ["full2", "Dashboard 2: price and effort"], ["full3", "Dashboard 3: buyers' reasons"], ["full4", "Dashboard 4: sellers and risk"]]
+      controls = [["closed", "Final round"], ["quick", "Round by round"], ["full1", "Dashboard 1: what opened the door"], ["full2", "Dashboard 2: who paid, who won"]]
         .map(function (v) { return btn("view", v[1], g.view === v[0] ? "on" : "", v[0]); }).join("");
     }
-    var hint = g.phase === "lobby" ? (P.length < 2 ? "Waiting for players. At least 2 are needed." : "Press Start when everyone has joined. Late joiners still get a role.") :
-      g.phase === "briefing" ? "Players are reading their cards. The market opens by itself when the clock reaches zero." :
-      g.phase === "open" ? "The market locks by itself at zero." + (cfg.rivals && cfg.rivals.on ? " The incumbents' account managers are played by this laptop: keep this page or the slides open." : "") :
-      g.phase === "paused" ? "No offers or decisions while paused." :
+    var hint = g.phase === "lobby" ? (Pl.length < 2 ? "Waiting for players. At least 2 are needed." : "Press Start when everyone has joined. Late joiners still get a role.") :
+      g.phase === "briefing" ? "Players are reading their cards. Round 1 starts by itself when the clock reaches zero." :
+      g.phase === "open" ? "The round closes by itself at zero. Buyers who have not decided stay with their supplier." :
+      g.phase === "reveal" ? (g.ends_at ? "The projector shows who signed and who got burned. The next round starts by itself at zero; press Hold if you need longer." : "On hold. Press the button when you are ready for the next round.") :
       "These buttons set the stand-alone projector screen. The slides show results on their own.";
     return '<div class="row"><div><div class="label">Phase</div><div class="phase">' + names[g.phase] + '</div></div><div style="text-align:right"><div class="label">Clock</div><div class="phase num" data-clock></div></div></div>' +
-      '<div class="chips"><span class="chip plain num">' + P.length + ' players</span><span class="chip plain num">' + sellers + " sellers · " + buyers + ' buyers</span><span class="chip plain num">' + hs.offers.length +
-      ' offers</span><span class="chip plain num">' + deals + ' deals</span><span class="chip plain num">' + stayed + ' stayed with incumbent</span>' +
-      (cfg.rivals && cfg.rivals.on ? '<span class="chip plain num">' + counterOffers + " incumbent counter-offers</span>" : "") +
-      (B2B.speed.of(H.sess.code, P) > 1 ? '<span class="chip sim">Test speed ' + B2B.speed.of(H.sess.code, P) + "×</span>" : "") +
-      (g.phase === "locked" ? '<span class="chip plain num">' + answered + " of " + (sellers + buyers) + " exit answers</span>" : "") + "</div>" +
+      '<div class="chips"><span class="chip plain num">' + Pl.length + ' players</span><span class="chip plain num">' + sellers.length + " start-ups (" + sellers.filter(function (s) { return !s.card.ready; }).length + " not ready) · " + buyers.length + " buyers</span>" +
+      (g.phase === "open" || g.phase === "reveal" || g.phase === "locked" ? '<span class="chip plain num">This round: ' + now.length + " of " + buyers.length + " decided, " + now.filter(function (d) { return d.kind !== "stay"; }).length + " signed</span>" : "") +
+      (B2B.speed.of(H.sess.code, Pl) > 1 ? '<span class="chip sim">Test speed ' + B2B.speed.of(H.sess.code, Pl) + "×</span>" : "") + "</div>" +
       '<p class="muted">' + hint + '</p><div class="controls">' + controls + "</div>" +
       (H.msg ? '<div class="card warn">' + esc(H.msg) + "</div>" : "");
   }
 
   function rosterView(hs) {
     if (!hs.players.length) return "<h2>Players</h2><p class=\"muted\">Nobody has joined yet.</p>";
-    var rows = hs.players.slice().sort(function (a, b) { return (a.role || "z").localeCompare(b.role || "z") || (a.category || "").localeCompare(b.category || "") || a.name.localeCompare(b.name); });
-    var desks = rows.some(function (p) { return p.card && p.card.desk; });
-    return "<h2>Players</h2>" + (desks ? '<p class="muted">Desk numbers are each buyer\'s secret: a seller has to ask for it face to face. Keep this panel off the projector.</p>' : "") +
-      "<table><tr><th>Name</th><th>Role</th><th>Desk</th><th>Organisation</th><th>Category</th><th>Knows</th><th>Offers</th><th>Result</th><th>Exit</th></tr>" +
+    var g = hs.game, upTo = Math.max(E.closedRounds(g), g.phase === "open" ? g.round : 0), byId = {};
+    hs.players.forEach(function (p) { byId[p.id] = p; });
+    var rows = hs.players.slice().sort(function (a, b) { return (a.role || "z").localeCompare(b.role || "z") || a.name.localeCompare(b.name); });
+    var cols = [];
+    for (var r = 1; r <= upTo; r++) cols.push(r);
+    function cellFor(p, r) {
+      var d = E.rowOf(p, hs.deals, r);
+      if (p.role === "buyer") {
+        if (!d) return r <= E.closedRounds(g) ? '<span class="muted">stayed</span>' : "";
+        if (d.kind === "stay") return "stayed";
+        var s = byId[d.seller_id];
+        return (d.kind === "pilot" ? "pilot: " : "full: ") + esc(s ? s.card.org : "?") + (d.delivered ? "" : ' <span class="chip bad">burned</span>');
+      }
+      if (!d) return "";
+      var b = byId[d.buyer_id];
+      return (d.kind === "pilot" ? "pilot: " : "full: ") + esc(b ? b.name : "?");
+    }
+    return "<h2>Players</h2>" + (rows.some(function (p) { return p.role; }) ? '<p class="muted">This table shows every secret: which start-ups are not ready, and every deal code. Keep this panel off the projector.</p>' : "") +
+      "<table><tr><th>Name</th><th>Role</th><th>Code</th><th>Organisation</th><th>Secret</th>" + cols.map(function (r) { return "<th>Round " + r + "</th>"; }).join("") + "<th>Points</th></tr>" +
       rows.map(function (p) {
-        var sent = hs.offers.filter(function (o) { return o.seller_id === p.id; });
-        var got = hs.offers.filter(function (o) { return o.buyer_id === p.id; });
-        var wins = sent.filter(function (o) { return o.status === "accepted"; }).length;
-        var result = !p.role ? "" : p.role === "seller" ? (wins ? wins + " won" : "") :
-          p.decision === "startup" ? "Signed a start-up" : p.decision === "incumbent" ? "Stayed" + (function () { var c = B2B.engine.standing(p.card, p.stay_level); return c ? " (took " + c.pct + "% off)" : ""; })() :
-          p.decision === "incumbent_default" ? "Stayed (no decision)" : B2B.engine.counters(p.card).length ? B2B.engine.counters(p.card).length + " counter-offer(s) on the table" : "";
-        return "<tr><td>" + esc(p.name) + (p.is_bot ? ' <span class="chip grey">sim</span>' : "") + "</td><td>" + esc(p.role || "waiting") + "</td><td>" + (p.card && p.card.desk ? '<span class="deskpill num">' + esc(p.card.desk) + "</span>" : "") + "</td><td>" + esc(p.card ? p.card.org : "") + "</td><td>" + esc(p.card ? p.card.categoryName : "") +
-          "</td><td>" + esc(p.card ? p.card.connections.map(function (c) { return c.name; }).join(", ") : "") + '</td><td class="num">' + (p.role === "seller" ? sent.length + " sent" : p.role === "buyer" ? got.length + " received" : "") +
-          "</td><td>" + result + (p.points != null ? ' · <span class="num">' + p.points + " pts</span>" : "") + "</td><td>" + esc(p.exit_answer || "") + "</td></tr>";
+        var c = p.card || {};
+        var secret = p.role === "seller" ? (c.ready ? (c.proof ? "works · has proof" : "works · no proof") : '<span class="chip bad">not ready</span>') :
+          p.role === "buyer" ? "knows " + ((c.knows || []).map(function (k) { return esc(k.name) + (k.ready ? " ✓" : " ✗"); }).join(", ") || "nobody") : "";
+        return "<tr><td>" + esc(p.name) + (p.is_bot ? ' <span class="chip grey">sim</span>' : "") + "</td><td>" + esc(p.role === "seller" ? "start-up" : p.role || "waiting") + "</td><td>" +
+          (c.code ? '<span class="deskpill num">' + esc(c.code) + "</span>" : "") + "</td><td>" + esc(c.org || "") + "</td><td>" + secret + "</td>" +
+          cols.map(function (r) { return "<td>" + (p.role ? cellFor(p, r) : "") + "</td>"; }).join("") +
+          '<td class="num">' + (p.role && E.closedRounds(g) ? pts(E.score(p, hs.deals, E.closedRounds(g), cfg).total) : "") + "</td></tr>";
       }).join("") + "</table>";
   }
 
@@ -114,7 +122,7 @@
     if (!H.shell) { root.innerHTML = shellView(); H.shell = true; H.key = ""; }
     var hs = H.hs;
     if (!hs) return;
-    var key = JSON.stringify([hs.game, hs.players, hs.offers, H.msg]);
+    var key = JSON.stringify([hs.game, hs.players, hs.deals, H.msg]);
     if (key === H.key) return;
     H.key = key;
     document.getElementById("status").innerHTML = statusView(hs);
@@ -127,8 +135,8 @@
     var el = document.getElementById("speednote");
     if (!el || !H.sess) return;
     var n = B2B.speed.chosen(H.sess.code), on = H.hs && B2B.speed.of(H.sess.code, H.hs.players) > 1;
-    el.textContent = n === 1 ? "For rehearsing alone: a faster briefing and market, with the simulated players and account managers keeping pace."
-      : "At " + n + "×: briefing " + ui.tclock(cfg.briefingSeconds / n) + ", market " + ui.tclock(cfg.marketSeconds / n) + ". " +
+    el.textContent = n === 1 ? "For rehearsing alone: shorter rounds and reveals, with the simulated players keeping pace."
+      : "At " + n + "×: each round " + ui.tclock(cfg.roundSeconds / n) + ", each reveal " + ui.tclock(cfg.revealSeconds / n) + ". " +
         (on ? "In force for this game." : "Not in force yet: it only applies once simulated players are in the game, so a real class always runs at normal speed.");
   }
 
@@ -170,28 +178,28 @@
       if (H.problems.length) { H.msg = "Fix data/cards.json first."; H.key = ""; return render(); }
       run(B2B.driver.start(ctx(), H.hs));
     } else if (a === "open") {
-      run(api.host(H.sess.code, H.sess.pin, "open", { market_ms: B2B.speed.ms(H.sess.code, H.hs.players, cfg.marketSeconds * 1000) }));
-    } else if (a === "pause" || a === "resume") {
-      run(api.host(H.sess.code, H.sess.pin, a));
+      run(B2B.driver.openRound(ctx(), H.hs));
+    } else if (a === "close") {
+      if (window.confirm("Close round " + H.hs.game.round + " now? Buyers who have not decided stay with their supplier.")) run(B2B.driver.closeRound(ctx(), H.hs));
+    } else if (a === "hold") {
+      run(api.host(H.sess.code, H.sess.pin, "hold"));
     } else if (a === "extend") {
       run(api.host(H.sess.code, H.sess.pin, "extend", { ms: B2B.speed.ms(H.sess.code, H.hs.players, cfg.extendSeconds * 1000) }));
-    } else if (a === "lock") {
-      if (window.confirm("Lock the market now? No more offers or decisions after this.")) run(api.host(H.sess.code, H.sess.pin, "lock"));
     } else if (a === "view") {
       run(api.host(H.sess.code, H.sess.pin, "view", { view: id }));
     } else if (a === "reset") {
-      if (window.confirm("Reset the game? All players, offers and results are deleted. Export first if you need the data.")) {
-        B2B.bots.plans = {}; B2B.rivals.plans = {};
+      if (window.confirm("Reset the game? All players and results are deleted. Export first if you need the data.")) {
+        B2B.bots.plans = {};
         run(api.host(H.sess.code, H.sess.pin, "reset"));
       }
     } else if (a === "addbots") {
       var n = Math.max(1, Math.min(60, Number(document.getElementById("botn").value) || 0));
       run(B2B.bots.add(ctx(), n, H.hs.players.map(function (p) { return p.name; })));
     } else if (a === "export") {
-      var full = { players: H.hs.players, offers: H.hs.offers }, base = "enterprise-deal-" + H.sess.code + "-";
+      var full = { players: H.hs.players, deals: H.hs.deals }, base = "enterprise-deal-" + H.sess.code + "-";
       api.hostEvents(H.sess.code, H.sess.pin).then(function (events) {
-        ui.download(base + "offers.csv", B2B.exporter.offersCsv(full, H.cards, cfg));
-        setTimeout(function () { ui.download(base + "players.csv", B2B.exporter.playersCsv(full, H.cards)); }, 400);
+        ui.download(base + "decisions.csv", B2B.exporter.decisionsCsv(full, cfg));
+        setTimeout(function () { ui.download(base + "players.csv", B2B.exporter.playersCsv(full, cfg)); }, 400);
         setTimeout(function () { ui.download(base + "events.csv", B2B.exporter.eventsCsv(events, full.players)); }, 800);
       }, function (e) { H.msg = B2B.errorText(e); H.key = ""; render(); });
     }
@@ -200,7 +208,8 @@
   // ---------- start ----------
   ui.loadJson("data/cards.json").then(function (cards) {
     H.cards = cards;
-    H.problems = B2B.engine.validateCards(cards);
+    H.problems = E.validateCards(cards);
+    if (!H.problems.length && cards.rounds.length !== E.roundCount(cfg)) H.problems.push('"rounds" in cards.json needs one entry for each of the ' + E.roundCount(cfg) + " rounds set in js/config.js.");
     render();
     ui.tickClocks(function () { return H.hs && H.hs.game; });
     refresh = ui.loop(function () {

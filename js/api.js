@@ -1,7 +1,11 @@
-/* Data layer. Two interchangeable back ends with the same calls:
-   - local:  the whole game lives in this browser (offline demo and rehearsal)
-   - remote: Supabase database functions (the live class game)
-   Every call returns a Promise. Failures reject with an Error whose .code is a short keyword. */
+/* Data layer. Two interchangeable back ends:
+     B2B.localApi   the whole game kept in this browser (offline demo mode)
+     B2B.remoteApi  Supabase database functions (the live class game)
+   Every call returns a Promise. Failures reject with an Error whose .code is a short keyword.
+
+   The game: lobby -> briefing -> round 1 open -> reveal -> round 2 open -> reveal -> ... -> locked.
+   A buyer makes one decision per round: stay, or sign a start-up (full deal or pilot) by typing its deal code.
+   A start-up can be signed by one buyer per round. Whether it delivers is fixed by its card ("ready"). */
 (function (root) {
   "use strict";
   var B2B = (root.B2B = root.B2B || {});
@@ -15,10 +19,11 @@
 
   function fail(code) { var e = new Error(code); e.code = code; return e; }
   function uid() {
-    return root.crypto && root.crypto.randomUUID ? root.crypto.randomUUID() :
-      "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
-        var r = (Math.random() * 16) | 0; return (c === "x" ? r : (r & 3) | 8).toString(16);
-      });
+    if (root.crypto && root.crypto.randomUUID) return root.crypto.randomUUID();
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+      var r = (Math.random() * 16) | 0;
+      return (c === "x" ? r : (r & 3) | 8).toString(16);
+    });
   }
   B2B.uid = uid;
 
@@ -26,47 +31,41 @@
   // Local back end
   // =====================================================================
   var KEY = "b2bsim.game.";
-  function load(code) { var s = store.getItem(KEY + String(code || "").toUpperCase()); return s ? JSON.parse(s) : null; }
+  // A game saved by an earlier version of this site (before the rounds) is treated as not there.
+  function load(code) {
+    var s = store.getItem(KEY + String(code || "").toUpperCase()), g = s ? JSON.parse(s) : null;
+    return g && Array.isArray(g.deals) ? g : null;
+  }
   function save(g) { store.setItem(KEY + g.code, JSON.stringify(g)); }
   function need(code) { var g = load(code); if (!g) throw fail("no_game"); return g; }
   function needHost(code, pin) { var g = need(code); if (g.pin !== String(pin)) throw fail("bad_pin"); return g; }
-  function byToken(g, token) { return g.players.filter(function (p) { return p.token === token; })[0]; }
-  function byId(list, id) { return list.filter(function (x) { return x.id === id; })[0]; }
-
-  function remaining(g, now) {
-    return g.phase === "paused" ? g.paused_ms || 0 : g.phase === "open" ? Math.max(0, g.ends_at - now) : 0;
-  }
-  function clock(g, now) {
-    return g.phase === "open" || g.phase === "paused" ? Math.round(((g.total_ms || 0) - remaining(g, now)) / 1000) : null;
-  }
+  function byToken(g, token) { return g.players.filter(function (p) { return p.token === token; })[0] || null; }
+  function byId(list, id) { return list.filter(function (x) { return x.id === id; })[0] || null; }
+  function rules(g) { return g.rules || { rounds: 3, pilotFrom: 2 }; }
+  function closedRounds(g) { return g.phase === "open" ? Math.max(0, g.round - 1) : g.phase === "reveal" || g.phase === "locked" ? g.round : 0; }
+  // Seconds into the current round; null outside a round.
+  function clock(g, now) { return g.phase === "open" ? Math.max(0, Math.round(((g.total_ms || 0) - Math.max(0, g.ends_at - now)) / 1000)) : null; }
   function log(g, type, actor, data) {
     var now = Date.now();
-    g.events.push({ at: now, t: clock(g, now), type: type, actor: actor || null, data: data || null });
+    g.events.push({ at: now, round: g.round || 0, t: clock(g, now), type: type, actor: actor || null, data: data || null });
   }
   function gameView(g) {
-    return { code: g.code, phase: g.phase, briefing_ends_at: g.briefing_ends_at, opened_at: g.opened_at,
-             ends_at: g.ends_at, paused_ms: g.paused_ms, total_ms: g.total_ms, view: g.view };
+    return { code: g.code, phase: g.phase, round: g.round || 0, rounds: rules(g).rounds, rules: rules(g),
+             briefing_ends_at: g.briefing_ends_at, ends_at: g.ends_at, total_ms: g.total_ms, view: g.view };
   }
-  function offerView(o) {
-    return { id: o.id, seller_id: o.seller_id, buyer_id: o.buyer_id, price: o.price, pilot: o.pilot, proof: o.proof,
-             fast: !!o.fast, guess: o.guess || null, cost: o.cost || 0,
-             status: o.status, reason: o.reason, created_at: o.created_at, sent_t: o.sent_t,
-             decided_at: o.decided_at, decided_t: o.decided_t, delivered: o.delivered, seller_points: o.seller_points,
-             revisions: o.revisions || 0 };
+  // `secret` hides whether the start-up delivered (a decision in a round that is still open).
+  function dealView(d, secret) {
+    return { id: d.id, round: d.round, buyer_id: d.buyer_id, seller_id: d.seller_id, kind: d.kind,
+             delivered: secret ? null : d.delivered, at: d.at, t: d.t };
   }
   function playerRow(p, withToken) {
-    var r = { id: p.id, name: p.name, role: p.role, category: p.category, card: p.card, pub: p.pub, is_bot: p.is_bot,
-              offers_left: p.offers_left, decision: p.decision, decided_at: p.decided_at, decided_t: p.decided_t,
-              points: p.points, exit_answer: p.exit_answer, exit_at: p.exit_at, joined_at: p.joined_at,
-              stay_level: p.stay_level == null ? null : p.stay_level };
+    var r = { id: p.id, name: p.name, role: p.role, card: p.card, pub: p.pub, is_bot: p.is_bot, joined_at: p.joined_at };
     if (withToken) r.token = p.token;
     return r;
   }
-  function cleanGuess(v) {
-    return ["lowest_cost", "lowest_risk", "fastest_deployment", "none"].indexOf(v) >= 0 ? v : null;
-  }
-  function openOnly(g) {
-    if (g.phase !== "open" || Date.now() >= g.ends_at) throw fail("not_open");
+  function closedDeals(g) {
+    var n = closedRounds(g);
+    return g.deals.filter(function (d) { return d.round <= n; }).map(function (d) { return dealView(d); });
   }
 
   var local = {
@@ -76,8 +75,8 @@
         code = "";
         for (var i = 0; i < 4; i++) code += letters[Math.floor(Math.random() * letters.length)];
       } while (load(code));
-      save({ code: code, pin: String(pin), phase: "lobby", view: "closed", briefing_ends_at: null, opened_at: null,
-             ends_at: null, paused_ms: null, total_ms: null, players: [], offers: [], events: [], created_at: Date.now() });
+      save({ code: code, pin: String(pin), phase: "lobby", round: 0, rules: null, view: "closed", briefing_ends_at: null,
+             ends_at: null, total_ms: null, players: [], deals: [], events: [], created_at: Date.now() });
       return { code: code };
     },
 
@@ -90,155 +89,68 @@
       if (!name) throw fail("bad_name");
       var base = name, n = 1;
       while (g.players.some(function (p) { return p.name.toLowerCase() === name.toLowerCase(); })) name = base + " " + ++n;
-      me = { id: uid(), name: name, token: token, role: null, category: null, card: null, pub: null, is_bot: !!bot,
-             offers_left: null, decision: null, decided_at: null, decided_t: null, points: null,
-             exit_answer: null, exit_at: null, joined_at: Date.now() };
+      me = { id: uid(), name: name, token: token, role: null, card: null, pub: null, is_bot: !!bot, joined_at: Date.now() };
       g.players.push(me);
       log(g, "join", me.id, { name: name });
       save(g);
       return { id: me.id, name: me.name };
     },
 
+    // What one phone may know.
     state: function (code, token) {
       var g = load(code);
       if (!g) return null;
-      var out = { now: Date.now(), game: gameView(g), n_players: g.players.length, me: null, buyers: [], offers: [] };
+      var out = { now: Date.now(), game: gameView(g), n_players: g.players.length, me: null, mine: null, closed: closedDeals(g), sellers: [] };
       var me = byToken(g, token);
       if (!me) return out;
       out.me = playerRow(me);
-      if (me.role === "seller") {
-        out.buyers = g.players.filter(function (b) { return b.role === "buyer" && b.category === me.category; })
-          .map(function (b) { return { id: b.id, name: b.name, pub: b.pub, decided: !!b.decision }; });
-        out.offers = g.offers.filter(function (o) { return o.seller_id === me.id; }).map(offerView);
-      } else if (me.role === "buyer") {
-        out.offers = g.offers.filter(function (o) { return o.buyer_id === me.id; }).map(function (o) {
-          var v = offerView(o), s = byId(g.players, o.seller_id);
-          v.seller = { name: s.name, pub: s.pub };
-          return v;
+      if (g.phase === "open") {
+        var row = g.deals.filter(function (d) { return d.round === g.round && (d.buyer_id === me.id || d.seller_id === me.id); })[0];
+        out.mine = row ? dealView(row, true) : null;
+      }
+      if (me.role === "buyer") {
+        var R = rules(g), showProof = g.round >= (R.proofFrom || 99);
+        out.sellers = g.players.filter(function (s) { return s.role === "seller"; }).map(function (s) {
+          return { id: s.id, name: s.name, org: s.pub.org, tagline: s.pub.tagline, is_bot: s.is_bot, code: s.card.code,
+                   proof: showProof ? !!s.card.proof : null,
+                   busy: g.phase === "open" && g.deals.some(function (d) { return d.round === g.round && d.seller_id === s.id; }) };
         });
       }
       return out;
     },
 
+    // What the projector may show. Results of a round appear only when it has closed.
     public: function (code) {
       var g = load(code);
       if (!g) return null;
-      var locked = g.phase === "locked";
+      var now = g.deals.filter(function (d) { return g.phase === "open" && d.round === g.round; });
       return {
-        now: Date.now(), game: gameView(g), n_offers: g.offers.length,
-        players: g.players.map(function (p) {
-          return { id: p.id, name: p.name, role: p.role, is_bot: p.is_bot, org: p.pub ? p.pub.org : null,
-                   decision: p.decision, decided_t: p.decided_t, exit_done: !!p.exit_answer,
-                   defence: p.pub && p.pub.defence ? p.pub.defence : null };
-        }),
-        deals: g.offers.filter(function (o) { return o.status === "accepted"; })
-          .map(function (o) { return { seller_id: o.seller_id, buyer_id: o.buyer_id, decided_t: o.decided_t, delivered: o.delivered }; }),
-        full: locked ? { players: g.players.map(function (p) { return playerRow(p); }), offers: g.offers.map(offerView) } : null
+        now: Date.now(), game: gameView(g),
+        players: g.players.map(function (p) { return { id: p.id, name: p.name, role: p.role, is_bot: p.is_bot, org: p.pub ? p.pub.org : null }; }),
+        decided_now: now.length, signed_now: now.filter(function (d) { return d.kind !== "stay"; }).length,
+        closed: closedDeals(g),
+        full: g.phase === "locked" ? { players: g.players.map(function (p) { return playerRow(p); }), deals: g.deals.map(function (d) { return dealView(d); }) } : null
       };
     },
 
-    // extra = { fast, guess }: fast-track deployment, and the seller's read of what the buyer cares about.
-    offer: function (code, token, buyerId, price, pilot, proof, desk, extra) {
-      var g = need(code), me = byToken(g, token);
-      extra = extra || {};
-      if (!me || me.role !== "seller") throw fail("not_joined");
-      openOnly(g);
-      if (!(me.offers_left > 0)) throw fail("no_offers_left");
-      var b = byId(g.players, buyerId);
-      if (!b || b.role !== "buyer" || b.category !== me.category) throw fail("wrong_category");
-      if (b.decision) throw fail("buyer_closed");
-      if (b.card.desk && String(desk || "").trim() !== String(b.card.desk)) throw fail("bad_desk");
-      if (g.offers.some(function (x) { return x.seller_id === me.id && x.buyer_id === b.id && x.status === "pending"; })) throw fail("already_pitched");
-      price = Number(price);
-      if (!(price >= me.card.floor && price <= me.card.list)) throw fail("bad_price");
-      proof = (proof || []).slice();
-      if (proof.some(function (a) { return me.card.assets.indexOf(a) < 0; })) throw fail("bad_proof");
-      var E = B2B.engine, terms = { pilot: !!pilot, fast: !!extra.fast, proof: proof };
-      var cost = E.offerCost(me.card, terms);
-      if (cost > E.tokensFree(me.card, g.offers.filter(function (x) { return x.seller_id === me.id; }))) throw fail("no_tokens");
-      var now = Date.now();
-      var o = { id: uid(), seller_id: me.id, buyer_id: b.id, price: price, pilot: !!pilot, proof: proof, fast: !!extra.fast,
-                guess: cleanGuess(extra.guess), cost: cost, status: "pending",
-                reason: null, created_at: now, sent_t: clock(g, now), decided_at: null, decided_t: null, delivered: null, seller_points: null, revisions: 0 };
-      g.offers.push(o);
-      me.offers_left -= 1;
-      log(g, "offer", me.id, { offer: o.id, buyer: b.id, price: price, pilot: !!pilot, proof: proof, fast: o.fast, guess: o.guess, tokens: cost });
-      save(g);
-      return { id: o.id };
-    },
-
-    // Change the terms of a term sheet the buyer has not answered yet. Free: it does not use up an offer.
-    revise: function (code, token, offerId, price, pilot, proof, extra) {
-      var g = need(code), me = byToken(g, token);
-      extra = extra || {};
-      if (!me || me.role !== "seller") throw fail("not_joined");
-      openOnly(g);
-      var o = byId(g.offers, offerId);
-      if (!o || o.seller_id !== me.id || o.status !== "pending") throw fail("offer_gone");
-      price = Number(price);
-      if (!(price >= me.card.floor && price <= me.card.list)) throw fail("bad_price");
-      proof = (proof || []).slice();
-      if (proof.some(function (a) { return me.card.assets.indexOf(a) < 0; })) throw fail("bad_proof");
-      var E = B2B.engine, fast = extra.fast == null ? !!o.fast : !!extra.fast;
-      var cost = E.offerCost(me.card, { pilot: !!pilot, fast: fast, proof: proof });
-      if (cost > E.tokensFree(me.card, g.offers.filter(function (x) { return x.seller_id === me.id; }), o.id)) throw fail("no_tokens");
-      var guess = extra.guess == null ? o.guess || null : cleanGuess(extra.guess);
-      log(g, "revise", me.id, { offer: o.id, buyer: o.buyer_id, from: { price: o.price, pilot: o.pilot, proof: o.proof, fast: !!o.fast, tokens: o.cost || 0 },
-                                to: { price: price, pilot: !!pilot, proof: proof, fast: fast, guess: guess, tokens: cost } });
-      o.price = price; o.pilot = !!pilot; o.proof = proof; o.fast = fast; o.guess = guess; o.cost = cost; o.revisions = (o.revisions || 0) + 1;
-      save(g);
-      return { ok: true };
-    },
-
-    decide: function (code, token, offerId, accept, reason, expectPrice) {
+    // A buyer's one decision for the round. kind: "full", "pilot" or "stay" (then sellerCode is ignored).
+    sign: function (code, token, sellerCode, kind) {
       var g = need(code), me = byToken(g, token);
       if (!me || me.role !== "buyer") throw fail("not_joined");
-      openOnly(g);
-      var o = byId(g.offers, offerId);
-      if (!o || o.buyer_id !== me.id || o.status !== "pending") throw fail("offer_gone");
-      var now = Date.now(), t = clock(g, now);
-      if (accept) {
-        if (me.decision) throw fail("already_decided");
-        if (expectPrice != null && Number(expectPrice) !== o.price) throw fail("offer_changed");
-        if (o.price > me.card.budget) throw fail("over_budget");
-        o.status = "accepted"; o.decided_at = now; o.decided_t = t;
-        g.offers.forEach(function (x) {
-          if (x.buyer_id === me.id && x.status === "pending") { x.status = "lost"; x.decided_at = now; x.decided_t = t; }
-        });
-        me.decision = "startup"; me.decided_at = now; me.decided_t = t;
-        log(g, "accept", me.id, { offer: o.id, seller: o.seller_id });
-      } else {
-        o.status = "rejected"; o.reason = reason || null; o.decided_at = now; o.decided_t = t;
-        log(g, "reject", me.id, { offer: o.id, seller: o.seller_id, reason: reason || null });
+      if (g.phase !== "open" || Date.now() >= g.ends_at) throw fail("not_open");
+      if (["full", "pilot", "stay"].indexOf(kind) < 0) throw fail("bad_arg");
+      if (g.deals.some(function (d) { return d.round === g.round && d.buyer_id === me.id; })) throw fail("already_decided");
+      var now = Date.now(), d = { id: uid(), round: g.round, buyer_id: me.id, seller_id: null, kind: kind, delivered: null, at: now, t: clock(g, now) };
+      if (kind !== "stay") {
+        if (kind === "pilot" && g.round < rules(g).pilotFrom) throw fail("no_pilot");
+        var s = g.players.filter(function (x) { return x.role === "seller" && x.card.code === String(sellerCode || "").trim(); })[0];
+        if (!s) throw fail("bad_code");
+        if (g.deals.some(function (x) { return x.round === g.round && x.seller_id === s.id; })) throw fail("seller_busy");
+        d.seller_id = s.id;
+        d.delivered = !!s.card.ready;      // fixed by the start-up's card; shown to nobody until the round closes
       }
-      save(g);
-      return { ok: true };
-    },
-
-    // seen = how many counter-offers from the incumbent the buyer had on screen when they chose to stay.
-    incumbent: function (code, token, seen) {
-      var g = need(code), me = byToken(g, token);
-      if (!me || me.role !== "buyer") throw fail("not_joined");
-      openOnly(g);
-      if (me.decision) throw fail("already_decided");
-      var now = Date.now(), t = clock(g, now);
-      var made = ((me.card.incumbent || {}).counters || []).length;
-      me.stay_level = Math.max(0, Math.min(made, Math.floor(Number(seen) || 0)));
-      me.decision = "incumbent"; me.decided_at = now; me.decided_t = t;
-      g.offers.forEach(function (x) {
-        if (x.buyer_id === me.id && x.status === "pending") { x.status = "lost_incumbent"; x.decided_at = now; x.decided_t = t; }
-      });
-      log(g, "incumbent", me.id, { counter_offers_seen: me.stay_level });
-      save(g);
-      return { ok: true };
-    },
-
-    exit: function (code, token, answer) {
-      var g = need(code), me = byToken(g, token);
-      if (!me || !me.role) throw fail("not_joined");
-      if (g.phase !== "locked") throw fail("not_locked");
-      me.exit_answer = String(answer); me.exit_at = Date.now();
-      log(g, "exit", me.id, { answer: me.exit_answer });
+      g.deals.push(d);
+      log(g, kind === "stay" ? "stay" : "sign", me.id, { round: g.round, seller: d.seller_id, kind: kind });
       save(g);
       return { ok: true };
     },
@@ -247,56 +159,50 @@
       var g = needHost(code, pin);
       return { now: Date.now(), game: gameView(g),
                players: g.players.map(function (p) { return playerRow(p, p.is_bot); }),
-               offers: g.offers.map(offerView) };
+               deals: g.deals.map(function (d) { return dealView(d); }) };
     },
 
     hostEvents: function (code, pin) { return needHost(code, pin).events.slice(); },
 
     host: function (code, pin, action, arg) {
-      var g = needHost(code, pin), now = Date.now(), changed = false;
+      var g = needHost(code, pin), now = Date.now(), changed = false, R = rules(g);
       arg = arg || {};
       if (action === "start" && g.phase === "lobby") {
-        g.phase = "briefing"; g.briefing_ends_at = now + (arg.briefing_ms || 0); changed = true;
-      } else if (action === "open" && g.phase === "briefing") {
-        g.phase = "open"; g.opened_at = now; g.total_ms = arg.market_ms; g.ends_at = now + arg.market_ms; changed = true;
-      } else if (action === "pause" && g.phase === "open") {
-        g.paused_ms = Math.max(0, g.ends_at - now); g.phase = "paused"; changed = true;
-      } else if (action === "resume" && g.phase === "paused") {
-        g.ends_at = now + g.paused_ms; g.paused_ms = null; g.phase = "open"; changed = true;
-      } else if (action === "extend" && (g.phase === "open" || g.phase === "paused")) {
-        if (g.phase === "open") g.ends_at = Math.max(g.ends_at, now) + arg.ms; else g.paused_ms += arg.ms;
-        g.total_ms += arg.ms; changed = true;
-      } else if (action === "lock" && (g.phase === "open" || g.phase === "paused")) {
-        var t = clock(g, now);
-        g.offers.forEach(function (o) { if (o.status === "pending") { o.status = "expired"; o.decided_at = now; o.decided_t = t; } });
-        g.players.forEach(function (p) {
-          if (p.role === "buyer" && !p.decision) { p.decision = "incumbent_default"; p.decided_at = now; p.decided_t = t; }
-        });
-        log(g, "lock", null, null);
-        g.phase = "locked"; g.view = "closed"; changed = true;
+        g.phase = "briefing"; g.round = 0; g.rules = arg.rules || R; g.briefing_ends_at = now + (arg.briefing_ms || 0); changed = true;
+      } else if (action === "open" && (g.phase === "briefing" || g.phase === "reveal") && g.round < R.rounds) {
+        if (!(arg.ms > 0)) throw fail("bad_arg");
+        g.phase = "open"; g.round += 1; g.total_ms = arg.ms; g.ends_at = now + arg.ms; changed = true;
+      } else if (action === "close" && g.phase === "open") {
+        // The last round closes the game; any other round goes to a reveal, with the next round on a timer.
+        if (g.round >= R.rounds) { g.phase = "locked"; g.view = "closed"; g.ends_at = null; }
+        else { g.phase = "reveal"; g.ends_at = arg.reveal_ms > 0 ? now + arg.reveal_ms : null; }
+        changed = true;
+      } else if (action === "extend" && (g.phase === "open" || g.phase === "reveal") && g.ends_at) {
+        if (!(arg.ms > 0)) throw fail("bad_arg");
+        g.ends_at = Math.max(g.ends_at, now) + arg.ms;
+        if (g.phase === "open") g.total_ms += arg.ms;
+        changed = true;
+      } else if (action === "hold" && g.phase === "reveal") {
+        g.ends_at = null; changed = true;     // the next round waits for the host
       } else if (action === "view" && g.phase === "locked") {
         g.view = arg.view; changed = true;
       } else if (action === "reset") {
-        g.players = []; g.offers = []; g.events = [];
-        g.phase = "lobby"; g.view = "closed";
-        g.briefing_ends_at = g.opened_at = g.ends_at = g.paused_ms = g.total_ms = null; changed = true;
+        g.players = []; g.deals = []; g.events = [];
+        g.phase = "lobby"; g.round = 0; g.rules = null; g.view = "closed";
+        g.briefing_ends_at = g.ends_at = g.total_ms = null; changed = true;
       }
-      if (changed && action !== "lock" && action !== "reset") log(g, action, null, arg);
+      if (changed && action !== "reset") log(g, action, null, arg);
       if (changed) save(g);
       return { changed: changed };
     },
 
+    // The host laptop deals the role cards (js/engine.js) and stores them here.
     hostApply: function (code, pin, patch) {
       var g = needHost(code, pin);
       (patch.players || []).forEach(function (u) {
         var p = byId(g.players, u.id);
         if (!p) return;
-        ["role", "category", "card", "pub", "offers_left", "points"].forEach(function (k) { if (u[k] != null) p[k] = u[k]; });
-      });
-      (patch.offers || []).forEach(function (u) {
-        var o = byId(g.offers, u.id);
-        if (!o) return;
-        ["delivered", "seller_points"].forEach(function (k) { if (u[k] != null) o[k] = u[k]; });
+        ["role", "card", "pub"].forEach(function (k) { if (u[k] != null) p[k] = u[k]; });
       });
       (patch.events || []).forEach(function (e) { log(g, String(e.type), e.actor || null, e.data || null); });
       save(g);
@@ -344,27 +250,15 @@
   var remoteApi = {
     createGame: function (pin) { return rpc("sim_create_game", { p_pin: String(pin) }); },
     join: function (code, name, token, bot) { return rpc("sim_join", { p_code: code, p_name: name, p_token: token, p_bot: !!bot }); },
-    state: function (code, token) { return rpc("sim_state", { p_code: code, p_token: token }); },
-    public: function (code) { return rpc("sim_public", { p_code: code }); },
-    offer: function (code, token, buyerId, price, pilot, proof, desk, extra) {
-      extra = extra || {};
-      return rpc("sim_offer", { p_code: code, p_token: token, p_buyer: buyerId, p_price: price, p_pilot: !!pilot, p_proof: proof || [], p_desk: desk == null ? null : String(desk),
-                                p_fast: !!extra.fast, p_guess: extra.guess || null });
+    state: function (code, token) { return rpc("sim_round_state", { p_code: code, p_token: token }); },
+    public: function (code) { return rpc("sim_round_public", { p_code: code }); },
+    sign: function (code, token, sellerCode, kind) {
+      return rpc("sim_sign", { p_code: code, p_token: token, p_seller_code: sellerCode == null ? null : String(sellerCode), p_kind: kind });
     },
-    revise: function (code, token, offerId, price, pilot, proof, extra) {
-      extra = extra || {};
-      return rpc("sim_revise", { p_code: code, p_token: token, p_offer: offerId, p_price: price, p_pilot: !!pilot, p_proof: proof || [],
-                                 p_fast: extra.fast == null ? null : !!extra.fast, p_guess: extra.guess || null });
-    },
-    decide: function (code, token, offerId, accept, reason, expectPrice) {
-      return rpc("sim_decide", { p_code: code, p_token: token, p_offer: offerId, p_accept: !!accept, p_reason: reason || null, p_expect_price: expectPrice == null ? null : expectPrice });
-    },
-    incumbent: function (code, token, seen) { return rpc("sim_incumbent", { p_code: code, p_token: token, p_seen: Math.floor(Number(seen) || 0) }); },
-    exit: function (code, token, answer) { return rpc("sim_exit", { p_code: code, p_token: token, p_answer: answer }); },
-    hostState: function (code, pin) { return rpc("sim_host_state", { p_code: code, p_pin: String(pin) }); },
+    hostState: function (code, pin) { return rpc("sim_round_host_state", { p_code: code, p_pin: String(pin) }); },
     hostEvents: function (code, pin) { return rpc("sim_host_events", { p_code: code, p_pin: String(pin) }); },
-    host: function (code, pin, action, arg) { return rpc("sim_host", { p_code: code, p_pin: String(pin), p_action: action, p_arg: arg || {} }); },
-    hostApply: function (code, pin, patch) { return rpc("sim_host_apply", { p_code: code, p_pin: String(pin), p_patch: patch }); }
+    host: function (code, pin, action, arg) { return rpc("sim_round_host", { p_code: code, p_pin: String(pin), p_action: action, p_arg: arg || {} }); },
+    hostApply: function (code, pin, patch) { return rpc("sim_round_apply", { p_code: code, p_pin: String(pin), p_patch: patch }); }
   };
 
   // =====================================================================
@@ -387,23 +281,15 @@
       bad_name: "Please enter your name.",
       closed: "This game has already finished.",
       not_joined: "You are not in this game yet.",
-      not_open: "The market is not open right now.",
-      not_locked: "The market has not closed yet.",
-      no_offers_left: "You have used all your offers.",
-      wrong_category: "That buyer is not in your category.",
-      buyer_closed: "That buyer has already decided.",
-      bad_price: "The price must be between your floor and your list price.",
-      bad_proof: "You can only show proof you actually hold.",
-      no_tokens: "Not enough tokens. Take something off this term sheet, or off another open one.",
-      bad_desk: "That is not their desk number. Ask them to show you their badge.",
-      already_pitched: "You already have an open term sheet with this buyer. Edit that one.",
-      offer_changed: "The seller just changed these terms. Check them again.",
+      not_open: "The round is not open right now.",
+      already_decided: "You have already decided for this round.",
+      bad_code: "No start-up has that deal code. Ask them to show you their phone.",
+      seller_busy: "That start-up has already been signed this round. Try another, or stay.",
+      no_pilot: "Pilots are not allowed in this round yet.",
       bad_arg: "That action could not be completed.",
-      already_decided: "You have already made your decision.",
-      over_budget: "That price is over your budget.",
-      offer_gone: "That offer is no longer open.",
       network: "No connection. Trying again…"
     };
-    return map[e && e.code] || "Something went wrong (" + ((e && (e.code || e.message)) || "unknown") + ").";
+    var code = e && e.code ? e.code : String(e && e.message ? e.message : e);
+    return map[code] || "Something went wrong (" + code + ").";
   };
 })(typeof window !== "undefined" ? window : globalThis);

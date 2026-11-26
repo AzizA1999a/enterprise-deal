@@ -3,8 +3,8 @@
    so the live game looks identical in both. */
 (function () {
   "use strict";
-  var B2B = window.B2B, ui = B2B.ui, cfg = window.B2B_CONFIG;
-  var esc = ui.esc, pct = ui.pct;
+  var B2B = window.B2B, ui = B2B.ui, cfg = window.B2B_CONFIG, E = B2B.engine;
+  var esc = ui.esc, pct = ui.pct, P = cfg.payoff;
   var V = { cards: null, bench: {}, qr: {}, code: "" };
 
   V.init = function (cards, bench) { V.cards = cards; V.bench = bench || {}; };
@@ -23,10 +23,8 @@
     } catch (e) { out = ""; }
     return (V.qr[url] = out);
   }
-  function optLabel(list, key) {
-    var o = (V.cards[list] || []).filter(function (x) { return x.key === key; })[0];
-    return o ? o.short || o.label : key;
-  }
+  function pts(n) { return (n > 0 ? "+" : n < 0 ? "−" : "") + Math.abs(n); }
+  function word(r) { return (V.cards.rounds[r - 1] || {}); }
 
   // ---------- building blocks ----------
   function bench(key) {
@@ -45,26 +43,43 @@
         (refAt != null ? '<div class="ref" style="left:' + refAt + '%"></div>' : "") + "</div></div>";
     }).join("") + "</div>";
   }
-  function rateBars(list, baseKey, compact) {
+  function rateBars(list, baseKey, compact, refAt, none) {
     return bars(list.map(function (x) {
       var r = x.rate;
-      return { label: x.label, width: r.pct || 0, value: r.n ? pct(r.pct) : "no offers", note: r.n ? r.won + " of " + r.n : "", base: x.key === baseKey, empty: !r.n };
-    }), null, compact);
-  }
-  function countBars(tally, list, limit) {
-    var keys = Object.keys(tally).sort(function (a, b) { return tally[b] - tally[a]; }).slice(0, limit || 6);
-    var total = Object.keys(tally).reduce(function (s, k) { return s + tally[k]; }, 0);
-    var max = keys.length ? tally[keys[0]] : 1;
-    if (!keys.length) return '<p class="muted">No answers yet.</p>';
-    return bars(keys.map(function (k) {
-      return { label: optLabel(list, k), width: (tally[k] / max) * 100, value: String(tally[k]), note: pct((tally[k] / total) * 100) };
-    }), null, true);
+      return { label: x.label, width: r.pct || 0, value: r.n ? pct(r.pct) : none || "none", note: r.n ? r.won + " of " + r.n : "", base: x.key === baseKey, empty: !r.n };
+    }), refAt, compact);
   }
   function panel(title, body, benchKey, sub) {
     return '<div class="s-panel"><h3>' + esc(title) + "</h3>" + (sub ? '<div class="muted">' + esc(sub) + "</div>" : "") + body + '<div class="grow"></div>' + (benchKey ? bench(benchKey) : "") + "</div>";
   }
   function stat(n, d) { return '<div class="stat"><div class="n num">' + esc(n) + '</div><div class="d">' + esc(d) + "</div></div>"; }
   function counter(n, label, cls) { return '<div class="s-panel counter' + (cls ? " " + cls : "") + '"><div class="n num">' + esc(n) + '</div><div class="label">' + esc(label) + "</div></div>"; }
+
+  // The picture of the whole game: one column per round. Its height is the share of buyers who signed a start-up;
+  // the dark part at the bottom is the buyers whose start-up failed.
+  function roundChart(rounds, total, cls) {
+    var html = '<div class="rchart ' + (cls || "") + '">';
+    for (var i = 0; i < total; i++) {
+      var x = rounds[i];
+      if (!x) { html += '<div class="col todo"><div class="v num">?</div><div class="stack"></div><div class="t">Round ' + (i + 1) + "<small>" + esc(word(i + 1).title || "") + "</small></div><div class=\"s\">&nbsp;</div></div>"; continue; }
+      var ok = x.buyers ? ((x.signed - x.burned) / x.buyers) * 100 : 0, burn = x.buyers ? (x.burned / x.buyers) * 100 : 0;
+      html += '<div class="col"><div class="v num">' + pct(x.pct) + '</div><div class="stack"><div style="flex:' + (100 - ok - burn) + ' 0 0px"></div>' +
+        '<div class="ok" style="flex:' + ok + ' 0 0px"></div><div class="burn" style="flex:' + burn + ' 0 0px"></div></div>' +
+        '<div class="t">Round ' + x.round + "<small>" + esc(x.title) + '</small></div><div class="s num">' + x.signed + " of " + x.buyers + " signed · " +
+        '<span class="burnt">' + x.burned + " burned</span></div></div>";
+    }
+    return html + '</div><div class="rkey"><span><i class="ok"></i>signed a start-up that delivered</span><span><i class="burn"></i>signed a start-up that failed</span></div>';
+  }
+  function burnedLines(list, limit) {
+    if (!list.length) return '<p class="s-sub">Nobody got burned.</p>';
+    return '<ul class="burnlist">' + list.slice(0, limit).map(function (d) {
+      return "<li><b>" + esc(d.buyer) + "</b> signed " + (d.kind === "pilot" ? "a pilot with " : "") + "<b>" + esc(d.sellerOrg) + "</b>. It was never ready.</li>";
+    }).join("") + (list.length > limit ? "<li>…and " + (list.length - limit) + " more.</li>" : "") + "</ul>";
+  }
+  function payoffLine(rule) {
+    return '<div class="payline num"><span>Stay <b>' + pts(P.stay) + "</b></span><span>Full deal <b>" + pts(P.fullWin) + "</b> or <b class=\"bad\">" + pts(P.fullLose) + "</b></span>" +
+      (rule.pilot ? "<span>Pilot <b>" + pts(P.pilotWin) + "</b> or <b class=\"bad\">" + pts(P.pilotLose) + "</b></span>" : "") + "</div>";
+  }
 
   // ---------- game phases ----------
   V.lobby = function (pub, code) {
@@ -73,7 +88,7 @@
       (local ? '<div class="s-panel" style="max-width:28rem"><div class="s-h2">Offline demo</div><p class="s-sub" style="margin-top:0.6rem">Phones cannot join in this mode. Add simulated players from the host controls.</p></div>'
              : '<div class="qr">' + (qrSvg(url) || '<div class="s-h2">' + esc(url) + "</div>") + "</div>") +
       '</div><div style="display:flex;flex-direction:column;gap:1.1rem;min-height:0;height:100%;justify-content:center">' +
-      '<div><div class="label" style="font-size:1rem">Join on your phone</div><div class="s-h1">Scan to enter the market</div></div>' +
+      '<div><div class="label" style="font-size:1rem">Join on your phone</div><div class="s-h1">Scan to play</div></div>' +
       (local ? "" : '<div><div class="joinurl">' + esc(url.replace(/^https?:\/\//, "")) + '</div><div class="s-sub">Game code <span class="code">' + esc(code) + "</span></div></div>") +
       '<div class="s-h2"><span class="num" style="font-size:4.5rem;color:var(--accent);text-shadow:0.2rem 0.2rem 0 var(--ink)">' + pub.players.length + "</span> joined</div>" +
       '<div class="names" style="max-height:14rem">' + pub.players.slice().reverse().map(function (p) { return '<span class="chip plain">' + esc(p.name) + "</span>"; }).join("") + "</div></div></div>";
@@ -82,167 +97,121 @@
     var s = pub.players.filter(function (p) { return p.role === "seller"; }).length;
     var b = pub.players.filter(function (p) { return p.role === "buyer"; }).length;
     return '<div class="s-cols" style="grid-template-columns:1.7fr 1fr"><div><div class="label" style="font-size:1rem;margin-bottom:1.3rem">Read your role card · the rules</div><ol class="rules" style="padding:0;margin:0">' +
-      V.cards.projectorRules.map(function (r) { return "<li><span>" + esc(r) + "</span></li>"; }).join("") + "</ol></div>" +
-      '<div class="s-panel" style="text-align:center"><div class="label" style="font-size:1rem">Market opens in</div><div class="giant num" style="font-size:9rem" data-clock></div>' +
-      '<div class="s-h2" style="margin-top:1.2rem"><span class="num">' + s + "</span> sellers · <span class=\"num\">" + b + "</span> buyers</div></div></div>";
+      V.cards.rules.map(function (r) { return "<li><span>" + esc(r) + "</span></li>"; }).join("") + "</ol></div>" +
+      '<div class="s-panel" style="text-align:center"><div class="label" style="font-size:1rem">Round 1 starts in</div><div class="giant num" style="font-size:9rem" data-clock></div>' +
+      '<div class="s-h2" style="margin-top:1.2rem"><span class="num">' + s + "</span> start-ups · <span class=\"num\">" + b + "</span> buyers</div></div></div>";
   };
-  V.market = function (pub) {
-    var by = {};
-    pub.players.forEach(function (p) { by[p.id] = p; });
-    var buyers = pub.players.filter(function (p) { return p.role === "buyer"; });
-    var stayed = buyers.filter(function (p) { return p.decision === "incumbent"; });
-    var who = function (p) { return p && p.name ? ' <span class="pn">(' + esc(p.name) + ")</span>" : ""; };
-    var events = pub.deals.map(function (d) { return { t: d.decided_t, html: '<b class="who">' + esc(by[d.buyer_id].org) + "</b>" + who(by[d.buyer_id]) + " signed with <b>" + esc(by[d.seller_id].org) + "</b>" + who(by[d.seller_id]), deal: true }; })
-      .concat(stayed.map(function (p) { return { t: p.decided_t, html: "<b>" + esc(p.org) + "</b>" + who(p) + " stayed with its incumbent" }; }))
-      .concat(buyers.filter(function (p) { return p.defence && !p.decision; }).map(function (p) {
-        return { t: p.defence.t, rival: true, html: "<b>" + esc(p.defence.by) + "</b> " + (p.defence.n > 1 ? "raised its counter-offer to " : "made a counter-offer to ") + esc(p.org) + who(p) };
-      }))
-      .sort(function (a, b) { return b.t - a.t; });   // newest first; the panel scrolls
-    var counterOffers = buyers.reduce(function (n, p) { return n + (p.defence ? p.defence.n : 0); }, 0);
-    var rivalsOn = !!(cfg.rivals && cfg.rivals.on);
-    var paused = pub.game.phase === "paused";
-    return '<div class="s-cols" style="grid-template-columns:1.25fr 1fr;grid-template-rows:minmax(0,1fr);align-items:stretch"><div style="display:flex;flex-direction:column;justify-content:center;gap:1.8rem">' +
-      '<div><div class="label" style="font-size:1rem">' + (paused ? "Paused" : "Market open · walk, talk, sign") + '</div><div class="giant num" data-clock></div></div>' +
-      '<div class="counters' + (rivalsOn ? " five" : "") + '">' + counter(pub.n_offers, "Term sheets") + (rivalsOn ? counter(counterOffers, "Incumbent counter-offers", "rival") : "") +
-      counter(pub.deals.length, "Deals signed") + counter(stayed.length, "Stayed with incumbent") +
-      counter(buyers.length - pub.deals.length - stayed.length, "Buyers undecided") + "</div></div>" +
-      '<div class="s-panel tickerbox"><div class="row" style="margin-bottom:1rem"><span class="label" style="font-size:1rem">Live deal ticker</span>' +
-      (events.length > 5 ? '<span class="muted" style="font-size:0.95rem">' + events.length + " so far · scroll for earlier</span>" : "") + '</div><div class="ticker">' +
-      (events.length ? events.map(function (e) { return '<div class="tick' + (e.deal ? " deal" : e.rival ? " rival" : "") + '"><span class="t num">' + ui.tclock(e.t) + "</span><span>" + e.html + "</span></div>"; }).join("")
-                     : '<p class="s-sub">No deals yet. Who will sign first?</p>') + "</div></div></div>";
+  // A round in play: the clock, what is new this round, and how many buyers have decided. No names, no outcomes.
+  V.round = function (pub) {
+    var g = pub.game, r = g.round, rule = E.roundRule(cfg, r);
+    var buyers = pub.players.filter(function (p) { return p.role === "buyer"; }).length;
+    return '<div class="s-cols" style="grid-template-columns:1.1fr 1fr;align-items:stretch"><div style="display:flex;flex-direction:column;justify-content:center;gap:1.4rem">' +
+      '<div><div class="label" style="font-size:1rem">Round ' + r + " of " + g.rounds + '</div><div class="s-h1">' + esc(word(r).title) + "</div></div>" +
+      '<div class="giant num" data-clock></div>' + payoffLine(rule) + "</div>" +
+      '<div style="display:flex;flex-direction:column;gap:1.2rem;justify-content:center">' +
+      '<div class="s-panel"><div class="label" style="font-size:1rem;margin-bottom:0.6rem">' + (r === 1 ? "This round" : "New this round") + '</div><div class="s-h2" style="font-weight:700">' + esc(word(r).new) + "</div></div>" +
+      '<div class="counters" style="grid-template-columns:1fr 1fr">' + counter(pub.decided_now, "of " + buyers + " buyers have decided") + counter(pub.signed_now, "signed a start-up") + "</div></div></div>";
   };
-  // Redraw a live view without losing the place the presenter scrolled the ticker to.
-  V.redraw = function (el, html) {
-    var old = el.querySelector(".ticker"), top = old ? old.scrollTop : 0;
-    el.innerHTML = html;
-    var now = el.querySelector(".ticker");
-    if (now && top) now.scrollTop = top;
+  // After a round: who signed, who got burned, and the picture so far.
+  V.reveal = function (pub) {
+    var g = pub.game, r = g.round, last = g.phase === "locked";
+    var rounds = B2B.stats.liveRounds(pub.players, pub.closed, r, V.cards), x = rounds[r - 1];
+    var next = r + 1 <= g.rounds ? word(r + 1) : null;
+    return '<div class="s-cols" style="grid-template-columns:1fr 1.05fr;align-items:stretch;gap:2.2rem"><div style="display:flex;flex-direction:column;gap:1.1rem;min-height:0">' +
+      '<div><div class="label" style="font-size:1rem">' + (last ? "Final round" : "Round " + r + " of " + g.rounds) + ' · what happened</div><div class="s-h1" style="font-size:3.2rem">' + esc(x.title) + "</div></div>" +
+      '<div class="counters three">' + counter(x.signed, "of " + x.buyers + " buyers signed a start-up") + counter(x.burned, "got burned", x.burned ? "burn" : "") + counter(x.stayed, "stayed") + "</div>" +
+      '<div class="s-panel" style="flex:1;min-height:0;overflow:hidden"><div class="label" style="font-size:1rem;margin-bottom:0.6rem">Burned this round</div>' + burnedLines(x.burnedList, 5) + "</div></div>" +
+      '<div style="display:flex;flex-direction:column;gap:1rem;min-height:0"><div class="s-panel" style="flex:1;min-height:0;display:flex;flex-direction:column"><div class="label" style="font-size:1rem;margin-bottom:0.4rem">Buyers who signed a start-up</div>' +
+      roundChart(rounds, g.rounds) + "</div>" +
+      (next ? '<div class="s-panel next"><div class="row"><div><div class="label" style="font-size:0.9rem">Next: round ' + (r + 1) + '</div><div class="s-h2">' + esc(next.title) + "</div></div>" +
+        (g.ends_at ? '<div class="s-h1 num" data-clock></div>' : '<div class="s-sub">waiting for the host</div>') + '</div><p class="s-sub" style="margin-top:0.4rem;font-size:1.15rem">' + esc(next.new) + "</p></div>" : "") +
+      "</div></div>";
   };
-  V.closed = function (pub) {
-    var players = pub.players.filter(function (p) { return p.role; });
-    var buyers = players.filter(function (p) { return p.role === "buyer"; });
-    var resolved = pub.deals.every(function (d) { return d.delivered != null; });
-    var failed = pub.deals.filter(function (d) { return d.delivered === false; }).length;
-    var answered = players.filter(function (p) { return p.exit_done; }).length;
-    return '<div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:2rem"><div><div class="s-h1">Market closed</div><div class="s-sub">Sit down, and answer the one question on your phone.</div></div>' +
-      '<div class="counters">' + counter(pub.deals.length, "Deals signed") + counter(resolved ? pub.deals.length - failed : "…", "Start-ups delivered") +
-      counter(resolved ? failed : "…", "Start-ups failed") + counter(buyers.length - pub.deals.length, "Stayed with incumbent") + "</div>" +
-      '<div><div class="row" style="margin-bottom:0.5rem"><span class="label" style="font-size:1rem">Exit answers</span><span class="num s-sub">' + answered + " of " + players.length + "</span></div>" +
-      '<div class="progress"><i style="width:' + (players.length ? (answered / players.length) * 100 : 0) + '%"></i></div></div></div>';
-  };
-  // The live game slide: follows the phase until the market is locked.
+  V.closed = function (pub) { return V.reveal(pub); };
+  // The live game slide: follows the phase to the end.
   V.game = function (pub, code) {
     var p = pub.game.phase;
-    return p === "lobby" ? V.lobby(pub, code) : p === "briefing" ? V.briefing(pub) : p === "open" || p === "paused" ? V.market(pub) : V.closed(pub);
+    return p === "lobby" ? V.lobby(pub, code) : p === "briefing" ? V.briefing(pub) : p === "open" ? V.round(pub) : V.reveal(pub);
   };
 
   // ---------- results ----------
   V.quick = function (st, noHead) {
-    var q = st.quick;
-    return (noHead ? "" : '<div class="pagehead"><div class="s-h2">What just happened in this room</div><div class="s-sub num">' + st.counts.offers + " term sheets · " + st.counts.deals + " deals · " + st.counts.buyers + " buyers</div></div>") +
-      '<div class="reveal">' +
-      '<div class="s-panel"><div class="q">Win rate of term sheets sent to a connection</div><div class="big num">' + pct(q.connWith.pct) + '</div><div class="n num">' + q.connWith.won + " of " + q.connWith.n + " signed</div>" +
-      '<div class="vs">versus <b class="num">' + pct(q.connWithout.pct) + '</b> without a connection</div><div class="n num">' + q.connWithout.won + " of " + q.connWithout.n + ' signed</div><div class="grow"></div>' + bench("conn_win_rate") + "</div>" +
-      '<div class="s-panel"><div class="q">Buyers who stayed with the incumbent</div><div class="big num">' + pct(q.incumbent.pct) + '</div><div class="n num">' + q.incumbent.count + " of " + q.incumbent.n + " buyers" +
-      (q.incumbent.byDefault ? " (" + q.incumbent.byDefault + " by never deciding)" : "") + '</div><div class="grow"></div>' + bench("incumbent_share") + "</div>" +
-      '<div class="s-panel"><div class="q">Winning deals that were NOT the cheapest the buyer was offered</div><div class="big num">' + pct(q.notCheapest.pct) + '</div><div class="n num">' + q.notCheapest.count + " of " + q.notCheapest.n + ' signed deals</div><div class="grow"></div>' + bench("not_cheapest") + "</div>" +
-      "</div>";
+    var R = st.rounds, first = R[0], last = R[R.length - 1];
+    return (noHead ? "" : '<div class="pagehead"><div class="s-h2">What just happened in this room</div><div class="s-sub num">' + st.counts.sellers + " start-ups, " + st.counts.notReady + " of them not ready · " + st.counts.buyers + " buyers</div></div>") +
+      '<div class="s-cols" style="grid-template-columns:1.25fr 1fr;align-items:stretch;gap:2rem"><div class="s-panel" style="display:flex;flex-direction:column;min-height:0">' +
+      '<div class="label" style="font-size:1rem;margin-bottom:0.4rem">Buyers who signed a start-up</div>' + roundChart(R, R.length, "big") + "</div>" +
+      '<div style="display:flex;flex-direction:column;gap:1rem;justify-content:center">' +
+      '<div class="s-panel">' + stat(pct(first.pct) + " → " + pct(last.pct), "of buyers signed a start-up: with words only, then with everything the room could check.") + "</div>" +
+      '<div class="s-panel">' + stat(first.signed ? pct((first.burned / first.signed) * 100) + " → " + (last.signed ? pct((last.burned / last.signed) * 100) : "–") : "–", "of those who signed got burned: round 1, then the last round.") + "</div>" +
+      '<div class="s-panel">' + stat(first.stayed + " of " + first.buyers, "buyers stayed with what they had in round 1. Staying scored " + pts(P.stay) + ", with no risk.") + "</div></div></div>";
   };
-  function head(title, page) {
-    return '<div class="pagehead"><div class="s-h2">' + esc(title) + '</div><div class="s-sub">Dashboard ' + page + " of 4</div></div>";
-  }
-  // Single panels, also used one at a time on the evidence slides.
+
   V.panels = {
-    conn: function (st) { return panel("Win rate by relationship", rateBars(st.byConnType, "none"), "conn_type", "Share of term sheets signed"); },
-    pilot: function (st) { return panel("With and without a pilot", rateBars(st.pilot, "no"), "pilot", "Share of term sheets signed"); },
-    proof: function (st) { return panel("By proof shown", rateBars(st.proof, "none"), "proof", "Share of term sheets signed"); },
-    price: function (st) {
-      var p = st.price;
-      return panel("Average price, as a share of the incumbent's price", bars([
-        { label: "Signed deals", width: (p.win || 0) / 1.2, value: p.win == null ? "none" : Math.round(p.win) + "%", note: p.nWin + " term sheets", empty: p.win == null },
-        { label: "Unsigned term sheets", width: (p.lose || 0) / 1.2, value: p.lose == null ? "none" : Math.round(p.lose) + "%", note: p.nLose + " term sheets", empty: p.lose == null }
-      ], 100 / 1.2), "price", "The vertical line marks the incumbent's price (100%)");
+    rounds: function (st) {
+      return panel("Buyers who signed a start-up, round by round", roundChart(st.rounds, st.rounds.length, "small"), "rounds_signed");
     },
-    perBuyer: function (st) {
-      var pb = st.perBuyer;
-      return panel("Term sheets received per buyer", stat(pb.avg == null ? "–" : pb.avg.toFixed(1), pb.avg == null ? "" : "on average. From " + pb.min + " to " + pb.max + " across " + pb.n + " buyers."), "offers_per_buyer");
+    stayed1: function (st) {
+      var x = st.rounds[0];
+      return panel("Round 1: words only", stat(pct(x.buyers ? (x.stayed / x.buyers) * 100 : null), x.stayed + " of " + x.buyers + " buyers stayed with the supplier they had."), "stayed_round1");
     },
-    firstWin: function (st) {
-      var fw = st.firstWin;
-      return panel("Term sheets a seller needed for a first win", stat(fw.avg == null ? "–" : fw.avg.toFixed(1), "on average, among sellers who won. " + fw.noWin + " of " + fw.sellers + " sellers never won a deal."), "offers_to_first_win");
+    burned: function (st) {
+      var x = st.rounds[0], all = st.burned;
+      return panel("Buyers who got burned", '<div class="burnstat"><span class="num">' + all.length + "</span> " + (all.length === 1 ? "time" : "times") + " in the whole game, " + x.burned + " in round 1</div>" + burnedLines(all, 4),
+        "burned", "Signed a start-up whose product was not ready");
     },
-    time: function (st) {
-      var t = st.time;
-      return panel("Time to the first deal", stat(t.first == null ? "–" : ui.tclock(t.first), t.median == null ? "No deals were signed." : "after the market opened. The median deal came at " + ui.tclock(t.median) + "."), "time_to_first_deal");
+    tell: function (st) {
+      var t = st.tell;
+      return panel("Could buyers tell who was ready?", rateBars(t.rounds.map(function (x) { return { key: "r" + x.round, label: "Round " + x.round + ": " + x.title, rate: x.rate }; }), null, true, t.share, "no deals") +
+        '<p class="muted" style="margin-top:0.5rem">The line marks blind luck: ' + t.notReady + " of " + t.sellers + " start-ups (" + pct(t.share) + ") were not ready.</p>",
+        "tell_apart", "Share of deals that went to a start-up that was not ready");
     },
-    signed: function (st) { return panel("Buyers who signed a start-up", countBars(st.reasons.buyerStartup, "exitOptions"), "reasons_signed", "Main reason for the decision"); },
-    stayed: function (st) {
-      var q = st.quick.incumbent;
-      return panel("Buyers who stayed with the incumbent", countBars(st.reasons.buyerIncumbent, "exitOptions"), "reasons_stayed", q.count + " of " + q.n + " buyers stayed");
+    proof: function (st) {
+      var p = st.proof;
+      if (!p.rounds.length) return panel("Proof", '<p class="muted">No round of this game showed proof.</p>', "proof");
+      return panel("Who got signed once proof could be shown?", rateBars(p.bars, "not", true, null, "none in this game"), "proof",
+        "Share of start-ups signed per round, " + (p.rounds.length > 1 ? "rounds " + p.rounds[0] + " to " + p.rounds[p.rounds.length - 1] : "round " + p.rounds[0]));
     },
-    reject: function (st) { return panel("Reasons given for rejecting a term sheet", countBars(st.reasons.reject, "rejectReasons"), "reject_reasons", "Chosen at the moment of rejection"); },
-    sellersWon: function (st) { return panel("Sellers who won a deal", countBars(st.reasons.sellerWon, "exitOptions"), "reasons_sellers_won", "Why do you think you won?"); },
-    sellersLost: function (st) { return panel("Sellers who won nothing", countBars(st.reasons.sellerLost, "exitOptions"), "reasons_sellers_lost", "Why do you think you lost?"); },
-    delivery: function (st) {
-      var d = st.delivery;
-      function failBar(label, x, base) { return { label: label, width: x.pct || 0, value: x.n ? pct(x.pct) : "no deals", note: x.n ? x.failed + " of " + x.n : "", empty: !x.n, base: base }; }
-      return panel("Start-ups that failed to deliver", bars([failBar("Start-ups holding proof", d.withProof), failBar("Start-ups with no proof", d.noProof), failBar("All signed deals", d.all, true)]), "delivery", "Share of signed deals that failed");
+    pilot: function (st) {
+      var p = st.pilot;
+      if (!p.rounds.length) return panel("Pilots", '<p class="muted">No round of this game allowed pilots.</p>', "pilot");
+      return panel("Who was signed with a pilot, not a full deal?", rateBars(p.bars, "proven", true, null, "no deals") +
+        '<p class="muted" style="margin-top:0.5rem">' + p.pilots + (p.pilots === 1 ? " pilot" : " pilots") + " in all. " +
+        (p.failedPilots ? p.failedPilots + " failed: each cost its buyer " + Math.abs(P.pilotLose) + (Math.abs(P.pilotLose) === 1 ? " point" : " points") + ", not " + Math.abs(P.fullLose) + "." : "None of them failed.") + "</p>",
+        "pilot", "Share of deals that were pilots");
     },
-    incumbent: function (st) {
-      var q = st.quick.incumbent;
-      return panel("Buyers who stayed with the incumbent", stat(pct(q.pct), q.count + " of " + q.n + " buyers" + (q.byDefault ? ", " + q.byDefault + " of them by never deciding" : "") + "."), "incumbent_share");
+    trust: function (st) {
+      var t = st.trust;
+      if (!t.rounds.length) return panel("Introductions", '<p class="muted">No round of this game had introductions.</p>', "trust");
+      return panel("Did knowing someone change the decision?", rateBars(t.bars, "none", true, null, "no such buyers") +
+        '<p class="muted" style="margin-top:0.5rem">' + t.viaIntro + " of " + t.dealsInIntro + " deals in that round went to a start-up the buyer knew. " +
+        t.toReferenced + " of " + t.dealsInRecord + " went to one that had already delivered for somebody in the room.</p>",
+        "trust", "Share who signed a start-up in round " + t.rounds[0]);
     },
-    // What the incumbents' account managers achieved, among buyers a start-up actually reached.
-    defence: function (st) {
-      var d = st.defence;
-      if (!d.on) return panel("When the incumbent fought back", '<p class="muted">The incumbents made no counter-offers in this game.</p>', "incumbent_defence");
-      function part(label, n, base) { return { label: label, width: d.pitched ? (n / d.pitched) * 100 : 0, value: d.pitched ? pct((n / d.pitched) * 100) : "none", note: n + " of " + d.pitched, base: base, empty: !d.pitched }; }
-      return panel("When the incumbent fought back", bars([
-        part("Took the incumbent's counter-offer", d.wonBack),
-        part("Signed the start-up anyway", d.signed),
-        part("Stayed without a counter-offer", d.stayedPlain, true)
-      ], null, true) + '<p class="muted" style="margin-top:0.6rem">' + d.counters + " counter-offers, from account managers played by the computer" +
-        (d.avgDiscount == null ? "." : ". Keeping a customer cost them " + Math.round(d.avgDiscount) + "% off, on average.") +
-        (d.earlyLocked ? " " + d.earlyLocked + (d.earlyLocked === 1 ? " buyer was" : " buyers were") + " renewed early, before any start-up reached them." : "") + "</p>",
-        "incumbent_defence", "Buyers who were pitched by at least one start-up");
+    notReady: function (st) {
+      var p = st.points;
+      function v(n) { return n == null ? "–" : (Math.round(n * 10) / 10).toFixed(1); }
+      return panel("Did it pay to sell a product that was not ready?", bars([
+        { label: "Start-ups whose product worked", width: Math.max(0, (p.avgReady || 0)) / (E.roundCount(cfg) * P.sellerFull) * 100, value: v(p.avgReady), note: "points each" },
+        { label: "Start-ups that were not ready", width: Math.max(0, (p.avgNotReady || 0)) / (E.roundCount(cfg) * P.sellerFull) * 100, value: v(p.avgNotReady), note: "points each", base: true }
+      ], null, true), "not_ready", "Average points over the whole game");
     },
-    // Sellers tap what they think the buyer cares about before sending a term sheet.
-    read: function (st) {
-      var r = st.read, t = "Did the seller know what the buyer wanted?";
-      if (!r.on) return panel(t, '<p class="muted">Not recorded in this game.</p>', "read_buyer");
-      return panel(t, rateBars(r.bars, "none", true) + '<p class="muted" style="margin-top:0.4rem">Term sheets that fitted both the buyer\'s priority and the boss\'s rule: ' +
-        (r.fit.n ? pct(r.fit.pct) + " signed (" + r.fit.won + " of " + r.fit.n + ")" : "none were sent") + ". The rest: " +
-        (r.noFit.n ? pct(r.noFit.pct) + " (" + r.noFit.won + " of " + r.noFit.n + ")" : "none") + ".</p>", "read_buyer", "Share of term sheets signed");
-    },
-    // Every extra on a term sheet ties up some of the seller's few tokens.
-    load: function (st) {
-      var l = st.load, t = "Did giving more win more?";
-      if (!l.on) return panel(t, '<p class="muted">This game was played without resource tokens.</p>', "tokens_load");
-      return panel(t, rateBars(l.bars, "light", true) + '<p class="muted" style="margin-top:0.4rem">Each seller held ' + l.budget + " tokens." +
-        (l.avg == null ? "" : " Average term sheet: " + l.avg.toFixed(1) + (l.avgWon == null ? "." : "; average signed one: " + l.avgWon.toFixed(1) + ".")) + "</p>",
-        "tokens_load", "Share of term sheets signed, by tokens on them");
-    },
-    connQuick: function (st) {
-      var q = st.quick;
-      return panel("Term sheets signed, with and without a connection", bars([
-        { label: "Sent to a connection", width: q.connWith.pct || 0, value: q.connWith.n ? pct(q.connWith.pct) : "none", note: q.connWith.won + " of " + q.connWith.n, empty: !q.connWith.n },
-        { label: "Sent cold", width: q.connWithout.pct || 0, value: q.connWithout.n ? pct(q.connWithout.pct) : "none", note: q.connWithout.won + " of " + q.connWithout.n, empty: !q.connWithout.n, base: true }
-      ]), "conn_win_rate", "Share of term sheets signed");
-    },
-    notCheapest: function (st) {
-      var q = st.quick.notCheapest;
-      return panel("Signed deals that were NOT the cheapest offer", stat(pct(q.pct), q.count + " of " + q.n + " signed deals."), "not_cheapest");
+    leaders: function (st) {
+      function list(rows) {
+        return '<ol class="leaders">' + rows.slice(0, 3).map(function (x) {
+          return "<li><span><b>" + esc(x.name) + '</b> <span class="muted">' + esc(x.org) + '</span></span><span class="num">' + pts(x.points) + "</span></li>";
+        }).join("") + "</ol>";
+      }
+      return panel("Top of the room", '<div class="label" style="margin-top:0.2rem">Buyers</div>' + list(st.points.buyers) + '<div class="label" style="margin-top:0.5rem">Start-ups</div>' + list(st.points.sellers) +
+        '<p class="muted" style="margin-top:0.4rem">A buyer who stayed every round scored ' + pts(st.points.alwaysStay) + ".</p>", null);
     }
   };
-  var P = V.panels;
-  V.full1 = function (st) { return head("What won deals", 1) + '<div class="dash c4 even">' + P.read(st) + P.conn(st) + P.pilot(st) + P.proof(st) + "</div>"; };
-  V.full2 = function (st) { return head("Price and effort", 2) + '<div class="dash c4">' + P.price(st) + P.perBuyer(st) + P.firstWin(st) + P.time(st) + "</div>"; };
-  V.full3 = function (st) {
-    return head("What buyers said drove the decision", 3) + (st.defence.on
-      ? '<div class="dash c4 even">' + P.defence(st) + P.signed(st) + P.stayed(st) + P.reject(st) + "</div>"
-      : '<div class="dash c3">' + P.signed(st) + P.stayed(st) + P.reject(st) + "</div>");
-  };
-  V.full4 = function (st) { return head("What sellers believed, and what the risk really was", 4) + '<div class="dash c4 even">' + P.load(st) + P.sellersWon(st) + P.sellersLost(st) + P.delivery(st) + "</div>"; };
+  var Pn = V.panels;
+  function head(title, n) { return '<div class="pagehead"><div class="s-h2">' + esc(title) + '</div><div class="s-sub num">' + n + " of 2</div></div>"; }
+  V.full1 = function (st) { return head("What opened the door", 1) + '<div class="dash c4 even">' + Pn.tell(st) + Pn.proof(st) + Pn.pilot(st) + Pn.trust(st) + "</div>"; };
+  V.full2 = function (st) { return head("Who paid, and who won", 2) + '<div class="dash c3">' + Pn.burned(st) + Pn.notReady(st) + Pn.leaders(st) + "</div>"; };
+
+  // Redraw a live view without losing a scroll position inside it.
+  V.redraw = function (el, html) { el.innerHTML = html; };
 
   B2B.views = V;
 })();

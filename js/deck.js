@@ -5,7 +5,7 @@
    Keys:  right / space / PageDown = next     left / PageUp = back     F = full screen
    A slide can carry:
      data-part="..."   section label in the top bar        data-lead="2"   speaker number (config.js team)
-     data-live="game|quick|full1|full2|full3|full4"        the whole slide is a live view
+     data-live="game|quick|full1|full2"                    the whole slide is a live view
      data-bare         no top bar (title slide)
    Inside a slide:
      class="step"              appears one click at a time
@@ -91,7 +91,7 @@
     }
   });
   deck.addEventListener("click", function (ev) {
-    if (ev.target.closest("button, a, input, .presenter, .d-timer, .ticker")) return;
+    if (ev.target.closest("button, a, input, .presenter, .d-timer")) return;
     next();
   });
   window.addEventListener("hashchange", function () {
@@ -113,7 +113,7 @@
     if (pub === undefined) return '<p class="s-sub">Connecting…</p>';
     if (pub === null) return '<div class="s-h1">Game ' + esc(D.code) + ' not found</div>';
     if (kind === "game") return V.game(pub, D.code);
-    if (!D.st) return '<div style="flex:1;display:grid;place-items:center">' + empty("This slide fills in with our room's results as soon as the market closes.") + "</div>";
+    if (!D.st) return '<div style="flex:1;display:grid;place-items:center">' + empty("This slide fills in with our room's results as soon as the last round closes.") + "</div>";
     return V[kind](D.st);
   }
 
@@ -123,19 +123,19 @@
     var html = "";
     if (!D.code || D.pub === null) html = b("create", "Create game", true);
     else if (!has) html = "<span>Game " + esc(D.code) + " · controls are on the host panel</span>";
-    else if (p === "lobby") html = b("start", "Start: assign roles", true) + b("bots", "+24 simulated players") +
+    else if (p === "lobby") html = b("start", "Start: deal the role cards", true) + b("bots", "+24 simulated players") +
       (D.pub.players.some(function (x) { return x.is_bot; }) ? b("speed", "Test speed " + B2B.speed.chosen(D.code) + "×") : "");
-    else if (p === "briefing") html = b("open", "Open market now", true);
-    else if (p === "open") html = b("pause", "Pause") + b("extend", "+1 min") + b("lock", "Lock market");
-    else if (p === "paused") html = b("resume", "Resume", true) + b("extend", "+1 min") + b("lock", "Lock market");
-    else if (p === "locked") html = "<span>Market closed · next slide for the results</span>";
+    else if (p === "briefing") html = b("open", "Start round 1 now", true);
+    else if (p === "open") html = b("extend", "+" + cfg.extendSeconds + " s") + b("close", "Close the round");
+    else if (p === "reveal") html = b("open", "Start round " + (D.pub.game.round + 1) + " now", true) + (D.pub.game.ends_at ? b("hold", "Hold") + b("extend", "+" + cfg.extendSeconds + " s") : "<span>on hold</span>");
+    else if (p === "locked") html = "<span>Game over · next slide for the results</span>";
     var fast = has && D.pub && p !== "lobby" ? B2B.speed.of(D.code, D.pub.players) : 1;
     return html + (fast > 1 ? " <span>Test speed " + fast + "×</span>" : "") + (D.msg ? " <span>" + esc(D.msg) + "</span>" : "");
   }
 
   function renderLive() {
     var s = slides[D.i], pub = D.pub;
-    var key = JSON.stringify(pub ? [pub.game, pub.players, pub.deals, pub.n_offers, !!pub.full, D.st && D.st.reasons.answered] : pub) + D.code;
+    var key = JSON.stringify(pub ? [pub.game, pub.players, pub.closed, pub.decided_now, pub.signed_now, !!pub.full] : pub) + D.code;
     var kind = s.getAttribute("data-live");
     if (kind) setHtml(s.querySelector(".body"), kind + key, liveHtml(kind));
     Array.prototype.forEach.call(s.querySelectorAll("[data-panel]"), function (el) {
@@ -176,13 +176,13 @@
     } else if (a === "bots") {
       run(B2B.bots.add(c, 24, (D.pub ? D.pub.players : []).map(function (p) { return p.name; })));
     } else if (a === "open") {
-      run(api.host(c.code, c.pin, "open", { market_ms: B2B.speed.ms(c.code, D.pub && D.pub.players, cfg.marketSeconds * 1000) }));
-    } else if (a === "pause" || a === "resume") {
-      run(api.host(c.code, c.pin, a));
+      run(api.hostState(c.code, c.pin).then(function (hs) { return B2B.driver.openRound(c, hs); }));
+    } else if (a === "close") {
+      if (window.confirm("Close this round now?")) run(api.hostState(c.code, c.pin).then(function (hs) { return B2B.driver.closeRound(c, hs); }));
+    } else if (a === "hold") {
+      run(api.host(c.code, c.pin, "hold"));
     } else if (a === "extend") {
       run(api.host(c.code, c.pin, "extend", { ms: B2B.speed.ms(c.code, D.pub && D.pub.players, cfg.extendSeconds * 1000) }));
-    } else if (a === "lock") {
-      if (window.confirm("Lock the market now?")) run(api.host(c.code, c.pin, "lock"));
     }
   });
 

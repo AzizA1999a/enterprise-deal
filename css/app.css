@@ -386,3 +386,60 @@ html.deck { font-size: 20.8px; }
 .d-vid-cap { display: flex; justify-content: space-between; align-items: center; gap: 1rem; color: #fff; font-size: 1rem; }
 .d-vid-cap .d-src { color: rgba(255, 255, 255, 0.7); }
 .d-vid-cap button { font: inherit; font-weight: 700; padding: 0.4rem 0.9rem; border-radius: 999px; border: 2px solid #fff; background: transparent; color: #fff; cursor: pointer; }
+
+/* ---------- the three-round game ---------- */
+/* phone */
+.card.secret { border-width: 3px; }
+.card.secret.ok { background: var(--good-soft); }
+.card.secret.no { background: var(--accent-soft); border-color: var(--bad); box-shadow: 4px 4px 0 var(--bad); }
+table.payoff { width: 100%; border-collapse: collapse; font-size: 0.95em; margin-top: 4px; }
+table.payoff th { font-size: 0.72em; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); text-align: right; padding: 4px 6px; font-weight: 700; }
+table.payoff td { padding: 7px 6px; border-top: 1.5px solid var(--line); }
+table.payoff td.num { text-align: right; font-family: var(--display); font-weight: 800; font-size: 1.2em; white-space: nowrap; }
+.good { color: var(--good); }
+.bad { color: var(--bad); }
+.chip.bad, .chip.good { color: #fff; }
+/* projector: one column per round */
+.rchart { flex: 1; min-height: 9rem; display: flex; gap: 1.2rem; align-items: stretch; }
+.rchart .col { flex: 1; min-width: 0; display: flex; flex-direction: column; text-align: center; }
+.rchart .v { font-family: var(--display); font-weight: 800; font-size: 2.8rem; line-height: 1; }
+.rchart .stack { flex: 1; min-height: 4.5rem; display: flex; flex-direction: column; margin: 0.45rem 0; background: var(--chart-track); border: 0.13rem solid var(--ink); border-radius: 0.55rem; overflow: hidden; }
+.rchart .stack .ok { background: var(--chart-1); }
+.rchart .stack .burn { background: var(--bad); }
+.rchart .t { font-weight: 800; font-size: 1.1rem; line-height: 1.15; }
+.rchart .t small { display: block; font-weight: 500; font-size: 0.85rem; color: var(--muted); }
+.rchart .s { font-size: 0.9rem; color: var(--muted); margin-top: 0.2rem; }
+.rchart .burnt { color: var(--bad); font-weight: 700; }
+.rchart .col.todo .v { color: var(--muted); }
+.rchart .col.todo .stack { border-style: dashed; background: transparent; }
+.rchart.big .v { font-size: 3.6rem; }
+.rchart.big .t { font-size: 1.3rem; }
+.rchart.small { min-height: 7rem; gap: 0.7rem; }
+.rchart.small .v { font-size: 1.7rem; }
+.rchart.small .t { font-size: 0.95rem; }
+.rchart.small .t small { font-size: 0.72rem; }
+.rchart.small .s { font-size: 0.75rem; }
+.rkey { display: flex; flex-wrap: wrap; gap: 0.3rem 1.2rem; font-size: 0.85rem; color: var(--muted); margin-top: 0.5rem; }
+.rkey i { display: inline-block; width: 0.8rem; height: 0.8rem; border-radius: 0.2rem; margin-right: 0.35rem; vertical-align: -0.05rem; border: 1px solid var(--ink); }
+.rkey i.ok { background: var(--chart-1); }
+.rkey i.burn { background: var(--bad); }
+.counter.burn { background: var(--bad); color: #fff; }
+.counter.burn .label { color: #fff; }
+.burnlist { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.55rem; font-size: 1.25rem; line-height: 1.25; }
+.burnlist li { padding-left: 1.1rem; border-left: 0.3rem solid var(--bad); }
+.s-panel.next { background: var(--brand); color: var(--brand-ink); }
+.s-panel.next .label, .s-panel.next .s-sub { color: #d3d5ee; }
+.payline { display: flex; flex-wrap: wrap; gap: 0.5rem 1.6rem; font-size: 1.35rem; }
+.payline b { font-family: var(--display); font-weight: 800; font-size: 1.6rem; }
+.burnstat { font-size: 1.05rem; margin-bottom: 0.5rem; }
+.burnstat .num { font-family: var(--display); font-weight: 800; font-size: 2.6rem; color: var(--bad); line-height: 1; }
+.dash .burnlist, .d-cols .burnlist { font-size: 1rem; gap: 0.4rem; }
+.leaders { margin: 0.2rem 0 0; padding: 0; list-style: none; display: grid; gap: 0.25rem; }
+.leaders li { display: flex; justify-content: space-between; gap: 0.6rem; font-size: 1.05rem; border-bottom: 1.5px solid var(--line); padding-bottom: 0.2rem; }
+.leaders .num { font-family: var(--display); font-weight: 800; }
+.counters.three { grid-template-columns: 1.25fr 1fr 1fr; }
+.counters.three .counter .n { font-size: 4.2rem; }
+.rchart .t { min-height: 2.5em; }
+.rchart .t small { min-height: 2.4em; }
+.rchart.small .t { min-height: 2.9em; }
+.phone .badge { margin-bottom: 14px; }

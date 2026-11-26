@@ -26,7 +26,7 @@
       if (!game) return null;
       if (game.phase === "briefing") return Math.max(0, game.briefing_ends_at - ui.now());
       if (game.phase === "open") return Math.max(0, game.ends_at - ui.now());
-      if (game.phase === "paused") return game.paused_ms;
+      if (game.phase === "reveal" && game.ends_at) return Math.max(0, game.ends_at - ui.now());   // until the next round starts by itself
       return null;
     },
 
@@ -60,7 +60,7 @@
         var game = getGame(), left = ui.left(game);
         document.querySelectorAll("[data-clock]").forEach(function (el) {
           el.textContent = left == null ? "" : ui.mmss(left);
-          el.classList.toggle("low", !!game && game.phase === "open" && left <= 30000);
+          el.classList.toggle("low", !!game && game.phase === "open" && left <= 20000);
         });
       }, 250);
     },

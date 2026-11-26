@@ -1,173 +1,156 @@
-/* Dashboard numbers and CSV export. Everything is computed from the raw
-   players and offers of one game; nothing here is estimated or invented. */
+/* Results and CSV export. Everything is computed from the raw players and decisions
+   of one game; nothing here is estimated or invented. */
 (function (root) {
   "use strict";
   var B2B = (root.B2B = root.B2B || {});
 
-  function rate(list) {
-    var won = list.filter(function (r) { return r.won; }).length;
-    return { won: won, n: list.length, pct: list.length ? (won / list.length) * 100 : null };
-  }
+  function rate(won, n) { return { won: won, n: n, pct: n ? (won / n) * 100 : null }; }
   function avg(nums) { return nums.length ? nums.reduce(function (a, b) { return a + b; }, 0) / nums.length : null; }
-  function median(nums) {
-    if (!nums.length) return null;
-    var s = nums.slice().sort(function (a, b) { return a - b; }), m = Math.floor(s.length / 2);
-    return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
-  }
-  function tally(keys) {
-    var out = {};
-    keys.forEach(function (k) { if (k) out[k] = (out[k] || 0) + 1; });
-    return out;
-  }
 
-  // One row per offer, joined with both players.
-  function offerRows(full) {
-    var byId = {};
-    full.players.forEach(function (p) { byId[p.id] = p; });
-    return full.offers.map(function (o) {
-      var s = byId[o.seller_id], b = byId[o.buyer_id];
-      var conn = s.card.connections.filter(function (c) { return c.id === b.id; })[0];
-      return { o: o, s: s, b: b, conn: conn ? conn.type : null, won: o.status === "accepted",
-               pct: (o.price / b.card.incumbent.price) * 100 };
-    }).sort(function (x, y) { return x.o.created_at - y.o.created_at; });
-  }
-
+  // full = { players: [rows with cards], deals: [every decision of every round] }
   function compute(full, cards) {
+    var cfg = root.B2B_CONFIG, E = B2B.engine;
     var players = full.players.filter(function (p) { return p.role; });
     var sellers = players.filter(function (p) { return p.role === "seller"; });
     var buyers = players.filter(function (p) { return p.role === "buyer"; });
-    var rows = offerRows(full);
-    var wins = rows.filter(function (r) { return r.won; });
-    var losses = rows.filter(function (r) { return !r.won; });
-
-    // --- quick reveal ---
-    var stayed = buyers.filter(function (b) { return b.decision !== "startup"; });
-    var notCheapest = wins.filter(function (w) {
-      var prices = rows.filter(function (r) { return r.b.id === w.b.id; }).map(function (r) { return r.o.price; });
-      return w.o.price > Math.min.apply(null, prices);
-    });
-    var quick = {
-      connWith: rate(rows.filter(function (r) { return r.conn; })),
-      connWithout: rate(rows.filter(function (r) { return !r.conn; })),
-      incumbent: { count: stayed.length, n: buyers.length, pct: buyers.length ? (stayed.length / buyers.length) * 100 : null,
-                   byDefault: buyers.filter(function (b) { return b.decision === "incumbent_default"; }).length },
-      notCheapest: { count: notCheapest.length, n: wins.length, pct: wins.length ? (notCheapest.length / wins.length) * 100 : null }
-    };
-
-    // --- win rates ---
-    var byConnType = [{ key: "none", label: "No connection", rate: rate(rows.filter(function (r) { return !r.conn; })) }]
-      .concat(Object.keys(cards.relationships).map(function (k) {
-        return { key: k, label: cards.relationships[k], rate: rate(rows.filter(function (r) { return r.conn === k; })) };
-      }));
-    var pilot = [
-      { key: "yes", label: "Pilot offered", rate: rate(rows.filter(function (r) { return r.o.pilot; })) },
-      { key: "no", label: "No pilot", rate: rate(rows.filter(function (r) { return !r.o.pilot; })) }
-    ];
-    var proof = Object.keys(cards.proofs).map(function (k) {
-      return { key: k, label: cards.proofs[k], rate: rate(rows.filter(function (r) { return (r.o.proof || []).indexOf(k) >= 0; })) };
-    });
-    proof.push({ key: "none", label: "No proof shown", rate: rate(rows.filter(function (r) { return !(r.o.proof || []).length; })) });
-
-    // --- price (as % of the buyer's incumbent price, so categories are comparable) ---
-    var price = { win: avg(wins.map(function (r) { return r.pct; })), nWin: wins.length,
-                  lose: avg(losses.map(function (r) { return r.pct; })), nLose: losses.length };
-
-    // --- volume ---
-    var received = buyers.map(function (b) { return rows.filter(function (r) { return r.b.id === b.id; }).length; });
-    var perBuyer = { avg: avg(received), min: received.length ? Math.min.apply(null, received) : null,
-                     max: received.length ? Math.max.apply(null, received) : null, n: buyers.length };
-    var needed = [], noWin = 0;
-    sellers.forEach(function (s) {
-      var mine = rows.filter(function (r) { return r.s.id === s.id; });
-      var idx = -1;
-      mine.forEach(function (r, i) { if (r.won && idx < 0) idx = i; });
-      if (idx >= 0) needed.push(idx + 1); else noWin++;
-    });
-    var firstWin = { avg: avg(needed), n: needed.length, noWin: noWin, sellers: sellers.length, dist: tally(needed.map(String)) };
-
-    // --- reasons ---
-    var sellerWon = {};
-    wins.forEach(function (r) { sellerWon[r.s.id] = true; });
-    var reasons = {
-      buyerStartup: tally(buyers.filter(function (b) { return b.decision === "startup"; }).map(function (b) { return b.exit_answer; })),
-      buyerIncumbent: tally(stayed.map(function (b) { return b.exit_answer; })),
-      sellerWon: tally(sellers.filter(function (s) { return sellerWon[s.id]; }).map(function (s) { return s.exit_answer; })),
-      sellerLost: tally(sellers.filter(function (s) { return !sellerWon[s.id]; }).map(function (s) { return s.exit_answer; })),
-      reject: tally(rows.filter(function (r) { return r.o.status === "rejected"; }).map(function (r) { return r.o.reason; })),
-      answered: players.filter(function (p) { return p.exit_answer; }).length
-    };
-
-    // --- timing (seconds of market clock) ---
-    var dealTimes = wins.map(function (r) { return r.o.decided_t; }).filter(function (t) { return t != null; }).sort(function (a, b) { return a - b; });
-    var time = { first: dealTimes.length ? dealTimes[0] : null, median: median(dealTimes), deals: dealTimes };
-
-    // --- delivery ---
-    var resolved = wins.filter(function (r) { return r.o.delivered != null; });
-    function failRate(list) {
-      var failed = list.filter(function (r) { return r.o.delivered === false; }).length;
-      return { failed: failed, n: list.length, pct: list.length ? (failed / list.length) * 100 : null };
+    var byId = {};
+    players.forEach(function (p) { byId[p.id] = p; });
+    var deals = full.deals.filter(function (d) { return d.kind !== "stay" && byId[d.seller_id] && byId[d.buyer_id]; });
+    var N = Math.max(E.roundCount(cfg), full.deals.reduce(function (m, d) { return Math.max(m, d.round); }, 0));
+    function ruleOf(r) { return E.roundRule(cfg, r); }
+    function label(r) { return ((cards && cards.rounds && cards.rounds[r - 1]) || {}).title || "Round " + r; }
+    function line(d) {
+      var b = byId[d.buyer_id], s = byId[d.seller_id];
+      return { round: d.round, kind: d.kind, delivered: d.delivered, buyer: b.name, buyerOrg: b.card.org, seller: s.name, sellerOrg: s.card.org };
     }
-    var delivery = {
-      all: failRate(resolved),
-      withProof: failRate(resolved.filter(function (r) { return r.s.card.assets.length > 0; })),
-      noProof: failRate(resolved.filter(function (r) { return r.s.card.assets.length === 0; }))
+
+    // --- round by round ---
+    var rounds = [];
+    for (var r = 1; r <= N; r++) {
+      var rows = deals.filter(function (d) { return d.round === r; });
+      rounds.push({
+        round: r, title: label(r), buyers: buyers.length, signed: rows.length,
+        full: rows.filter(function (d) { return d.kind === "full"; }).length,
+        pilot: rows.filter(function (d) { return d.kind === "pilot"; }).length,
+        stayed: buyers.length - rows.length,
+        burned: rows.filter(function (d) { return !d.delivered; }).length,
+        toNotReady: rows.filter(function (d) { return !byId[d.seller_id].card.ready; }).length,
+        pct: buyers.length ? (rows.length / buyers.length) * 100 : null,
+        burnedList: rows.filter(function (d) { return !d.delivered; }).map(line),
+        servedList: rows.filter(function (d) { return d.delivered; }).map(line)
+      });
+    }
+
+    // --- could buyers tell a ready start-up from one that is not? ---
+    var notReady = sellers.filter(function (s) { return !s.card.ready; });
+    var tell = {
+      share: sellers.length ? (notReady.length / sellers.length) * 100 : null, notReady: notReady.length, sellers: sellers.length,
+      rounds: rounds.map(function (x) { return { round: x.round, title: x.title, rate: rate(x.toNotReady, x.signed) }; })
     };
 
-    // --- did the seller know what the buyer wanted, and did giving more win more? ---
-    var E = B2B.engine, cfg = root.B2B_CONFIG || {};
-    function fits(r) { var f = E.fit(r.b.card, r.o, r.s.pub, cfg); return f.priorityMet && f.constraintMet; }
-    function spent(r) { return E.offerCost(r.s.card, r.o); }
-    var recorded = rows.filter(function (r) { return r.o.guess; });
-    var read = {
-      on: recorded.length > 0,
+    // --- proof: how often was each kind of start-up signed, in the rounds where proof is shown? ---
+    var proofRounds = [], pilotRounds = [], introRounds = [], recordRounds = [];
+    for (var q = 1; q <= N; q++) {
+      if (ruleOf(q).proof) proofRounds.push(q);
+      if (ruleOf(q).pilot) pilotRounds.push(q);
+      if (ruleOf(q).intros) introRounds.push(q);
+      if (ruleOf(q).record) recordRounds.push(q);
+    }
+    function sellerRounds(group, rs) {
+      var won = 0;
+      group.forEach(function (s) { rs.forEach(function (x) { if (deals.some(function (d) { return d.round === x && d.seller_id === s.id; })) won++; }); });
+      return rate(won, group.length * rs.length);
+    }
+    var holders = sellers.filter(function (s) { return s.card.proof; });
+    var readyNoProof = sellers.filter(function (s) { return s.card.ready && !s.card.proof; });
+    var proof = {
+      rounds: proofRounds,
       bars: [
-        { key: "right", label: "Knew what the buyer cared about", rate: rate(recorded.filter(function (r) { return E.readOf(r.o, r.b.card) === "right"; })) },
-        { key: "wrong", label: "Guessed wrong", rate: rate(recorded.filter(function (r) { return E.readOf(r.o, r.b.card) === "wrong"; })) },
-        { key: "none", label: "Did not ask", rate: rate(recorded.filter(function (r) { return E.readOf(r.o, r.b.card) === "none"; })) }
+        { key: "proof", label: "Start-ups with proof", rate: sellerRounds(holders, proofRounds) },
+        { key: "ready", label: "Ready, but no proof", rate: sellerRounds(readyNoProof, proofRounds) },
+        { key: "not", label: "Not ready", rate: sellerRounds(notReady, proofRounds) }
       ],
-      viaConnection: recorded.filter(function (r) { return r.conn && E.readOf(r.o, r.b.card) === "right"; }).length,
-      fit: rate(rows.filter(fits)), noFit: rate(rows.filter(function (r) { return !fits(r); }))
+      before: sellerRounds(sellers, [1].filter(function (x) { return proofRounds.indexOf(x) < 0; }))
     };
-    var holders = sellers.filter(function (s) { return s.card.tokens; });
-    var load = {
-      on: holders.length > 0,
-      budget: holders.length ? holders[0].card.tokens.budget : null,
+
+    // --- pilots: who was offered the small first step, and what did it save? ---
+    var inPilot = deals.filter(function (d) { return pilotRounds.indexOf(d.round) >= 0; });
+    function pilotShare(list) { return rate(list.filter(function (d) { return d.kind === "pilot"; }).length, list.length); }
+    var failedPilots = inPilot.filter(function (d) { return d.kind === "pilot" && !d.delivered; }).length;
+    var pilot = {
+      rounds: pilotRounds,
       bars: [
-        { key: "light", label: "0 or 1 token", rate: rate(rows.filter(function (r) { return spent(r) <= 1; })) },
-        { key: "mid", label: "2 or 3 tokens", rate: rate(rows.filter(function (r) { return spent(r) === 2 || spent(r) === 3; })) },
-        { key: "heavy", label: "4 or more tokens", rate: rate(rows.filter(function (r) { return spent(r) >= 4; })) }
+        { key: "unproven", label: "Deals with a start-up that had no proof", rate: pilotShare(inPilot.filter(function (d) { return !byId[d.seller_id].card.proof; })) },
+        { key: "proven", label: "Deals with a start-up that had proof", rate: pilotShare(inPilot.filter(function (d) { return byId[d.seller_id].card.proof; })) }
       ],
-      avg: avg(rows.map(spent)), avgWon: avg(wins.map(spent))
+      pilots: inPilot.filter(function (d) { return d.kind === "pilot"; }).length, failedPilots: failedPilots,
+      saved: failedPilots * (cfg.payoff.pilotLose - cfg.payoff.fullLose)
     };
 
-    // --- the incumbents' account managers ---
-    function made(b) { return E.counters(b.card); }
-    function took(b) { return b.decision === "incumbent" ? E.standing(b.card, b.stay_level) : null; }
-    var pitched = buyers.filter(function (b) { return rows.some(function (r) { return r.b.id === b.id; }); });
-    var notPitched = buyers.filter(function (b) { return pitched.indexOf(b) < 0; });
-    var wonBack = pitched.filter(took);
-    var kept = buyers.filter(took);
-    var defence = {
-      on: buyers.some(function (b) { return made(b).length > 0; }),
-      counters: buyers.reduce(function (n, b) { return n + made(b).length; }, 0),
-      buyersCountered: buyers.filter(function (b) { return made(b).length > 0; }).length,
-      pitched: pitched.length,
-      signed: pitched.filter(function (b) { return b.decision === "startup"; }).length,
-      wonBack: wonBack.length,
-      stayedPlain: pitched.filter(function (b) { return b.decision !== "startup" && !took(b); }).length,
-      notPitched: notPitched.length,
-      earlyLocked: notPitched.filter(took).length,
-      avgDiscount: avg(kept.map(function (b) { return took(b).pct; })),
-      leverage: rows.filter(function (r) { return wonBack.indexOf(r.b) >= 0; }).length
+    // --- trust: did an introduction change what a buyer did? ---
+    var introduced = buyers.filter(function (b) { return (b.card.knows || []).some(function (k) { return k.ready; }); });
+    var others = buyers.filter(function (b) { return introduced.indexOf(b) < 0; });
+    function signedIn(group, rs) {
+      var won = 0;
+      group.forEach(function (b) { rs.forEach(function (x) { if (deals.some(function (d) { return d.round === x && d.buyer_id === b.id; })) won++; }); });
+      return rate(won, group.length * rs.length);
+    }
+    var inIntro = deals.filter(function (d) { return introRounds.indexOf(d.round) >= 0; });
+    function knew(d, ready) { return (byId[d.buyer_id].card.knows || []).some(function (k) { return k.id === d.seller_id && k.ready === ready; }); }
+    var inRecord = deals.filter(function (d) { return recordRounds.indexOf(d.round) >= 0; });
+    var trust = {
+      rounds: introRounds,
+      bars: [
+        { key: "intro", label: "Buyers who knew a start-up that works", rate: signedIn(introduced, introRounds) },
+        { key: "none", label: "Buyers with no such introduction", rate: signedIn(others, introRounds) }
+      ],
+      viaIntro: inIntro.filter(function (d) { return knew(d, true); }).length, dealsInIntro: inIntro.length,
+      warnedAndSigned: inIntro.filter(function (d) { return knew(d, false); }).length,
+      toReferenced: inRecord.filter(function (d) { return E.record(d.seller_id, deals, d.round - 1).delivered.length > 0; }).length, dealsInRecord: inRecord.length
     };
 
+    // --- points ---
+    function total(p) { return E.score(p, full.deals, N, cfg).total; }
+    function board(list) {
+      return list.map(function (p) { return { name: p.name, org: p.card.org, points: total(p), ready: p.role === "seller" ? p.card.ready : null, is_bot: p.is_bot }; })
+        .sort(function (a, b) { return b.points - a.points || a.name.localeCompare(b.name); });
+    }
+    var points = {
+      buyers: board(buyers), sellers: board(sellers),
+      alwaysStay: N * cfg.payoff.stay,
+      avgReady: avg(sellers.filter(function (s) { return s.card.ready; }).map(total)),
+      avgNotReady: avg(notReady.map(total)),
+      avgBuyer: avg(buyers.map(total))
+    };
+
+    var allBurned = [];
+    rounds.forEach(function (x) { allBurned = allBurned.concat(x.burnedList); });
     return {
-      defence: defence, read: read, load: load,
       simulated: full.players.filter(function (p) { return p.is_bot; }).length,
-      counts: { players: players.length, sellers: sellers.length, buyers: buyers.length, offers: rows.length, deals: wins.length },
-      quick: quick, byConnType: byConnType, pilot: pilot, proof: proof, price: price,
-      perBuyer: perBuyer, firstWin: firstWin, reasons: reasons, time: time, delivery: delivery
+      counts: { players: players.length, sellers: sellers.length, buyers: buyers.length, deals: deals.length, rounds: N,
+                notReady: notReady.length, withProof: holders.length },
+      rounds: rounds, tell: tell, proof: proof, pilot: pilot, trust: trust, points: points, burned: allBurned
     };
+  }
+
+  // The same round-by-round numbers from public data alone (no role cards), for the reveal after each round.
+  // players: [{id, name, role, org}], closed: decisions of the rounds already closed.
+  function liveRounds(players, closed, upTo, cards) {
+    var byId = {};
+    players.forEach(function (p) { byId[p.id] = p; });
+    var nB = players.filter(function (p) { return p.role === "buyer"; }).length, out = [];
+    for (var r = 1; r <= upTo; r++) {
+      var rows = closed.filter(function (d) { return d.round === r && d.kind !== "stay" && byId[d.seller_id] && byId[d.buyer_id]; });
+      var line = function (d) {
+        return { round: d.round, kind: d.kind, delivered: d.delivered, buyer: byId[d.buyer_id].name, buyerOrg: byId[d.buyer_id].org,
+                 seller: byId[d.seller_id].name, sellerOrg: byId[d.seller_id].org };
+      };
+      out.push({ round: r, title: ((cards && cards.rounds && cards.rounds[r - 1]) || {}).title || "Round " + r, buyers: nB, signed: rows.length,
+                 stayed: nB - rows.length, pilot: rows.filter(function (d) { return d.kind === "pilot"; }).length,
+                 burned: rows.filter(function (d) { return !d.delivered; }).length, pct: nB ? (rows.length / nB) * 100 : null,
+                 burnedList: rows.filter(function (d) { return !d.delivered; }).map(line), servedList: rows.filter(function (d) { return d.delivered; }).map(line) });
+    }
+    return out;
   }
 
   // ---------- CSV ----------
@@ -182,51 +165,39 @@
   function iso(ms) { return ms ? new Date(ms).toISOString() : ""; }
   function yn(b) { return b == null ? "" : b ? "yes" : "no"; }
 
-  function offersCsv(full, cards, cfg) {
-    var E = B2B.engine;
-    var header = ["offer_id", "sent_at", "seconds_from_market_open", "category", "seller_name", "seller_startup", "buyer_name",
-      "buyer_enterprise", "connection", "connection_type", "price_k", "incumbent_price_k", "price_pct_of_incumbent",
-      "seller_list_k", "seller_floor_k", "buyer_budget_k", "pilot_included", "proof_reference", "proof_security_cert",
-      "proof_pilot_ready", "status", "accepted", "reject_reason", "decided_at", "decided_seconds_from_market_open",
-      "delivered", "seller_true_reliability", "buyer_hidden_priority", "buyer_boss_constraint", "fits_priority",
-      "meets_boss_constraint", "cheapest_offer_buyer_received", "seller_exit_answer", "buyer_exit_answer",
-      "seller_simulated", "buyer_simulated", "incumbent_counter_offers_to_buyer", "buyer_took_incumbent_counter_offer",
-      "fast_track", "tokens_on_term_sheet", "seller_read_of_buyer", "seller_read_was"];
-    var rows = offerRows(full);
-    var lines = rows.map(function (r) {
-      var o = r.o, f = E.fit(r.b.card, o, r.s.pub, cfg), proof = o.proof || [];
-      var min = Math.min.apply(null, rows.filter(function (x) { return x.b.id === r.b.id; }).map(function (x) { return x.o.price; }));
-      return [o.id, iso(o.created_at), o.sent_t, r.s.card.categoryName, r.s.name, r.s.card.org, r.b.name, r.b.card.org,
-        yn(!!r.conn), r.conn ? cards.relationships[r.conn] : "", o.price, r.b.card.incumbent.price, r.pct.toFixed(1),
-        r.s.card.list, r.s.card.floor, r.b.card.budget, yn(o.pilot), yn(proof.indexOf("reference") >= 0),
-        yn(proof.indexOf("security_cert") >= 0), yn(proof.indexOf("pilot_ready") >= 0), o.status, yn(r.won), o.reason,
-        iso(o.decided_at), o.decided_t, yn(o.delivered), r.s.card.reliability, r.b.card.priority, r.b.card.constraint.text,
-        yn(f.priorityMet), yn(f.constraintMet), yn(o.price === min), r.s.exit_answer, r.b.exit_answer, yn(r.s.is_bot), yn(r.b.is_bot),
-        E.counters(r.b.card).length, yn(r.b.decision === "incumbent" && !!E.standing(r.b.card, r.b.stay_level)),
-        yn(!!o.fast), r.s.card.tokens ? E.offerCost(r.s.card, o) : "", o.guess === "none" ? "did not ask" : o.guess ? cards.priorities[o.guess] || o.guess : "",
-        o.guess ? E.readOf(o, r.b.card) : ""];
-    });
+  // One line per buyer per round, including the rounds where a buyer stayed.
+  function decisionsCsv(full, cfg) {
+    var E = B2B.engine, byId = {};
+    full.players.forEach(function (p) { byId[p.id] = p; });
+    var buyers = full.players.filter(function (p) { return p.role === "buyer"; });
+    var N = Math.max(E.roundCount(cfg), full.deals.reduce(function (m, d) { return Math.max(m, d.round); }, 0));
+    var header = ["round", "buyer_name", "buyer_enterprise", "decision", "decided_by_tapping", "seconds_into_round", "startup_name", "startup",
+      "startup_ready", "startup_had_proof", "delivered", "buyer_knew_startup", "startup_had_delivered_before", "buyer_points", "startup_points",
+      "buyer_simulated", "startup_simulated"];
+    var lines = [];
+    for (var r = 1; r <= N; r++) {
+      buyers.forEach(function (b) {
+        var d = E.rowOf(b, full.deals, r), s = d && d.seller_id ? byId[d.seller_id] : null;
+        var k = s ? (b.card.knows || []).filter(function (x) { return x.id === s.id; })[0] : null;
+        lines.push([r, b.name, b.card.org, !d || d.kind === "stay" ? "stayed" : d.kind === "pilot" ? "pilot" : "full deal", yn(!!d), d ? d.t : "",
+          s ? s.name : "", s ? s.card.org : "", s ? yn(s.card.ready) : "", s ? yn(s.card.proof) : "", s ? yn(d.delivered) : "",
+          s ? yn(!!k) : "", s ? yn(E.record(s.id, full.deals, r - 1).delivered.length > 0) : "",
+          E.buyerRound(d, cfg), s ? E.sellerRound(d, cfg) : "", yn(b.is_bot), s ? yn(s.is_bot) : ""]);
+      });
+    }
     return toCsv(header, lines);
   }
 
-  function playersCsv(full, cards) {
-    var header = ["name", "simulated", "role", "category", "organisation", "connections", "connection_details",
-      "offers_sent", "offers_received", "deals_won", "decision", "decided_seconds_from_market_open", "points",
-      "exit_answer", "joined_at", "incumbent_counter_offers", "incumbent_deepest_discount_pct",
-      "incumbent_discount_accepted_pct", "incumbent_extra_accepted"];
+  function playersCsv(full, cfg) {
+    var E = B2B.engine;
+    var N = Math.max(E.roundCount(cfg), full.deals.reduce(function (m, d) { return Math.max(m, d.round); }, 0));
+    var header = ["name", "simulated", "role", "organisation", "product_ready", "has_proof", "deal_code", "knows", "deals_signed", "times_burned", "points", "joined_at"];
     var lines = full.players.map(function (p) {
-      var conns = p.card ? p.card.connections : [];
-      var sent = full.offers.filter(function (o) { return o.seller_id === p.id; });
-      var got = full.offers.filter(function (o) { return o.buyer_id === p.id; });
-      return [p.name, yn(p.is_bot), p.role, p.card ? p.card.categoryName : "", p.card ? p.card.org : "", conns.length,
-        conns.map(function (c) { return c.name + " (" + cards.relationships[c.type] + ")"; }).join("; "),
-        p.role === "seller" ? sent.length : "", p.role === "buyer" ? got.length : "",
-        p.role === "seller" ? sent.filter(function (o) { return o.status === "accepted"; }).length : "",
-        p.decision, p.decided_t, p.points, p.exit_answer, iso(p.joined_at)].concat((function () {
-          if (p.role !== "buyer") return ["", "", "", ""];
-          var made = B2B.engine.counters(p.card), took = p.decision === "incumbent" ? B2B.engine.standing(p.card, p.stay_level) : null;
-          return [made.length, made.length ? made[made.length - 1].pct : "", took ? took.pct : "", took ? yn(took.addon) : ""];
-        })());
+      var c = p.card || {}, mine = full.deals.filter(function (d) { return d.kind !== "stay" && (d.buyer_id === p.id || d.seller_id === p.id); });
+      return [p.name, yn(p.is_bot), p.role, c.org || "", p.role === "seller" ? yn(c.ready) : "", p.role === "seller" ? yn(c.proof) : "", c.code || "",
+        (c.knows || []).map(function (k) { return k.name + " (" + (k.ready ? "works" : "not ready") + ")"; }).join("; "),
+        p.role ? mine.length : "", p.role === "buyer" ? mine.filter(function (d) { return !d.delivered; }).length : "",
+        p.role ? E.score(p, full.deals, N, cfg).total : "", iso(p.joined_at)];
     });
     return toCsv(header, lines);
   }
@@ -234,11 +205,11 @@
   function eventsCsv(events, players) {
     var names = {};
     players.forEach(function (p) { names[p.id] = p.name; });
-    return toCsv(["at", "seconds_from_market_open", "event", "player", "details"], events.map(function (e) {
+    return toCsv(["at", "seconds_into_round", "event", "player", "details"], events.map(function (e) {
       return [iso(e.at), e.t, e.type, e.actor ? names[e.actor] || e.actor : "", e.data ? JSON.stringify(e.data) : ""];
     }));
   }
 
-  B2B.stats = { compute: compute, offerRows: offerRows };
-  B2B.exporter = { offersCsv: offersCsv, playersCsv: playersCsv, eventsCsv: eventsCsv };
+  B2B.stats = { compute: compute, liveRounds: liveRounds };
+  B2B.exporter = { decisionsCsv: decisionsCsv, playersCsv: playersCsv, eventsCsv: eventsCsv };
 })(typeof window !== "undefined" ? window : globalThis);

@@ -1,8 +1,9 @@
 # The Enterprise Deal
 
-A 10-minute classroom simulation of enterprise B2B selling. Students join on their phones, become
-start-up sellers or enterprise buyers, negotiate face to face, and the projector then shows what
-actually drove the deals.
+A classroom game about selling to a large company, played in three two-minute rounds. Students join on
+their phones and become start-ups or buyers. Each round a buyer can stay with the supplier they have
+(safe) or sign a start-up (more to win, more to lose), and some start-ups are secretly not ready. After
+every round the projector shows who signed and who got burned.
 
 ## The pages
 
@@ -14,8 +15,8 @@ actually drove the deals.
 | Projector only | the game screens without slides, for rehearsals | `screen.html` |
 | Speaking script | the four speakers: what to say and press, slide by slide | `script.html` |
 
-One window must stay open for the whole game, because it runs the automatic steps (late joiners, opening
-the market, locking at zero, resolving deliveries): either the presentation or the host panel. If both
+One window must stay open and in front for the whole game, because it runs the automatic steps (dealing
+role cards, late joiners, opening and closing each round on the clock): either the presentation or the host panel. If both
 are open in the same browser, only one of them does that work.
 
 ## How the slides follow the assignment brief
@@ -30,72 +31,46 @@ in APA format on the last slides. The wording is a draft for the team to rewrite
 1. Open `host.html`, press **Create game**, then **Open the presentation**. Move that window to the
    projector and press **F** for full screen.
 2. Arrow keys (or a clicker) move through the slides. Some slides reveal one item per click.
-3. On the game slide, small controls sit at the bottom left: **Start**, **Open market now**, **Pause**,
-   **+1 min**, **Lock market**. They are faint until you point at them.
+3. On the game slide, small controls sit at the bottom left: **Start**, then per round **+30 s** and
+   **Close the round**, and during a reveal **Start round 2 now** and **Hold**. They are faint until you
+   point at them. If you press nothing after Start, the whole game runs on the clock.
 4. Students scan the QR code on that slide and type their name.
-5. After the market closes, the next slides show this room's results beside the research.
-6. In the host panel, **Download CSV files** saves every term sheet, every player and the event log.
+5. After round 3 closes, the next slides show this room's results beside the research.
+6. In the host panel, **Download CSV files** saves every decision of every round, every player and the event log.
    **Reset game** clears players and results but keeps the game code.
 
 ## How the game is played
 
-- Everyone stands up. Sellers walk to buyers in their category, ask what they need, and pitch face to face.
-- Each buyer has a private desk number on their Inbox tab. A seller needs it to open a term sheet, so
-  nobody can send offers from across the room.
-- The seller writes what was agreed (price, pilot, fast-track, proof shown) and can edit it while they haggle.
-  Editing is free; opening a term sheet uses one of the seller's three.
-- The buyer signs it or rejects it. A buyer signs one deal, or stays with the incumbent.
-- The Badge tab turns the phone into a name tag.
+One gamble, repeated three times, with a reveal after each round.
 
-### You cannot give everything
+- **Buyers** make one decision per round. Stay with the current supplier: +1, always. Or sign a start-up:
+  +4 if it delivers, −6 if it fails. To sign, the buyer types the start-up's two-digit deal code, which
+  they can only get by talking to it.
+- **Start-ups** try to get signed: +3 for a full deal, +1 for a pilot. One buyer can sign a start-up per
+  round. About one start-up in three is dealt a product that is **not ready**: it will fail every time,
+  it knows, and nobody else does.
+- **Round 1, words only.** Buyers have nothing to go on but the pitch.
+- **Round 2, proof and a small first step.** Half of the start-ups that work hold proof (a reference
+  customer), which a buyer sees when they type the code. Buyers may also sign a pilot: +2 or −1.
+- **Round 3, references and introductions.** Everyone can see what each start-up did in rounds 1 and 2,
+  and each buyer is told the truth about one start-up.
+- A buyer who does nothing in a round stays. Whether a start-up delivers is fixed by its card: no dice.
 
-A seller who offers the floor price and ticks every box has nothing to decide, so extras are scarce:
-
-- Each seller holds **6 resource tokens**, standing for a small team's time.
-- A pilot ties up 3 (2 for a seller whose card says "pilot-ready"), fast-track deployment 2, each proof shown 1.
-  A seller holding everything cannot put it all on one term sheet.
-- Tokens are tied up by every open or signed term sheet. They come back when a buyer rejects it, signs someone
-  else or stays with the incumbent, and when the seller edits an extra off.
-- Fast-track brings a slow start-up down to 4 weeks, which is what "fastest deployment" buyers need.
-- What a buyer does not need adds nothing to their score. So a seller has to find out the buyer's hidden
-  priority and their boss's rule: by asking, or through a connection, who sees both.
-- Before sending, the seller taps what they think the buyer cares about most (or "I did not ask"). Two results
-  panels use this: "Did the seller know what the buyer wanted?" and "Did giving more win more?".
-
-All of it is in `tokens` in `js/config.js` (`on: false` makes every extra free again). The questions sellers
-are advised to ask are `askFirst` in `data/cards.json`. These are game settings, not measured facts.
-
-### The big vendors fight back
-
-Every buyer's incumbent has an account manager played by the computer, in a real class as well as in demo mode.
-It makes the start-ups work for every deal:
-
-- **Early renewal.** A buyer nobody has pitched gets "renew today for 5% off" part-way through the market.
-  If they take it, they leave the market before a start-up reaches them.
-- **Counter-offer.** 12 to 30 seconds after a start-up's term sheet arrives, the incumbent answers with a
-  discount that matches part of the start-up's saving, and one line of doubt about the start-up's weakest
-  point (no reference customer, no security certification, no pilot).
-- **Final offer.** When the start-up improves its terms, or a second start-up arrives, the incumbent makes
-  one last, deeper offer (20% off at most) with an extra aimed at the buyer's hidden priority.
-- The buyer sees all of this on the Inbox tab and scores it only by tapping **Stay** before the close:
-  50 points, plus 1 per 1% off, plus 15 for the extra. A buyer who never decides renews at the full price.
-- A seller sees only that the incumbent has countered, not by how much. They have to ask.
-- The projector shows each counter-offer in the ticker, never the amount.
-
-The account managers run on the host laptop, so the slides or the host panel must stay open during the market.
-All of their settings are in `rivals` in `js/config.js` (`on: false` switches them off); their lines are drafts
-in `rivals` in `data/cards.json`. These are game settings, not measured facts about real vendors.
+On average a blind full deal is worth less than staying, and a blind pilot about the same as staying, so
+the room should be cautious in round 1 and bolder as it can check more. All of it is in `game` and
+`payoff` in `js/config.js`. These are game settings, not measured facts.
 
 ## Rehearsing alone (demo mode)
 
-In the host panel, **Add simulated players** fills the game with bots that join, send offers, decide and
-answer the exit question. You can join from your own phone at the same time. Any result that includes
+In the host panel, **Add simulated players** fills the game with bots. Simulated buyers hear a few pitches
+each round and decide like a cautious class would; simulated start-ups can be tapped from a buyer's phone,
+since you cannot talk to them. You can join from your own phone at the same time. Any result that includes
 bots is labelled "Simulated run" on the projector.
 
 **Test speed.** To get through a rehearsal quickly, choose 2×, 4×, 8× or 16× under Demo mode in the host panel
-(or press **Test speed** in the slide controls after adding simulated players). The briefing and the market
-get that much shorter (at 8× the 10-minute market lasts 1:15), and the simulated players and the account
-managers act that much faster. The clock and the ticker show real seconds. The speed is remembered per game
+(or press **Test speed** in the slide controls after adding simulated players). The briefing, the rounds
+and the reveals get that much shorter (at 4× a round lasts 30 seconds), and the simulated players keep pace.
+The clock shows real seconds. The speed is remembered per game
 code, in this browser only, and it is ignored unless the game has simulated players in it, so a real class
 always runs at normal speed.
 
@@ -109,10 +84,10 @@ panel's first screen.
 
 | File | What it controls |
 |---|---|
-| `data/cards.json` | Role card templates, categories, wording of rules, exit options. Drafts: rewrite freely. |
+| `data/cards.json` | Start-up and buyer names, the three rules on the briefing screen, and the wording of each round. Drafts: rewrite freely. |
 | `data/benchmarks.json` | The "Real world" line under each dashboard metric. Empty until you fill it in. |
 | `css/theme.css` | The colour palette and font. |
-| `js/config.js` | Team names, timings, seller/buyer split, term sheets per seller, points, resource tokens (`tokens`), how hard the incumbents fight (`rivals`), Supabase connection. |
+| `js/config.js` | Team names, timings, start-up/buyer split, what each round allows (`game`), points (`payoff`), Supabase connection. |
 | `js/facts.js` | The research figures, cases, playbook and APA reference list shown on the slides. Never add a number without its source. |
 | `deck.html` | The slides themselves. |
 | `art/` | The illustrations (made with Higgsfield in one print style). |
@@ -122,10 +97,12 @@ After editing, reload the pages (and redeploy if the site is hosted). Each page 
 
 ## How the rules work
 
-- A connection gives no points. A connected seller sees the buyer's hidden priority and boss's rule; a
-  connected buyer sees the seller's true reliability; a connection's offer is pinned to the top of the inbox.
-- Each signed deal is drawn once against the seller's hidden reliability when the market locks.
-- Points are set in `js/config.js` and explained on every role card.
+- Whether a start-up is ready, and whether it holds proof, is dealt at random when the host presses Start,
+  in fixed proportions (`lemonShare`, `proofShare`). Only a start-up that works can hold proof.
+- A buyer's decision is recorded the moment it is made. The outcome is fixed by the start-up's card, and is
+  shown to nobody, the buyer included, until the round closes.
+- During a round the projector shows only how many buyers have decided. Names and outcomes appear in the reveal.
+- Points are worked out from the decisions and `payoff`; nothing else is stored.
 
 ## Checking it works
 
@@ -136,12 +113,14 @@ node test/simulate.js 28 40
 plays 40 offline games of 28 simulated players and checks every rule.
 
 ```bash
-node test/online.js 30 40
+node test/online.js 26
 ```
 
-plays one real-time game against the live database (about a minute).
+plays one short real-time game against the live database (about a minute). If it stalls, the connection has
+probably hung: stop it and run it again.
 
 ## Database
 
-`supabase/schema.sql`, then `supabase/002_face_to_face.sql`, `supabase/003_rivals.sql` and `supabase/004_tokens.sql` is the full database: private tables plus the `sim_*` functions that phones call.
+`supabase/schema.sql`, then `002_face_to_face.sql`, `003_rivals.sql`, `004_tokens.sql` and `005_rounds.sql` in `supabase/` is the full database: private tables plus the `sim_*` functions that phones call. The game uses the functions in `005_rounds.sql`
+(`sim_round_*` and `sim_sign`); the earlier files are kept because that file builds on their tables.
 Phones can never read a table directly, so hidden card information stays hidden.

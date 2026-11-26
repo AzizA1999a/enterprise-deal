@@ -5,7 +5,7 @@
   var B2B = window.B2B, ui = B2B.ui, api = B2B.api, cfg = window.B2B_CONFIG, store = B2B.store, V = B2B.views;
   var esc = ui.esc;
   var stage = document.getElementById("stage"), bar = document.getElementById("sbar");
-  var VIEWS = ["closed", "quick", "full1", "full2", "full3", "full4"];
+  var VIEWS = ["closed", "quick", "full1", "full2"];
 
   var host = null;
   try { host = JSON.parse(store.getItem("b2bsim.host") || "null"); } catch (e) { host = null; }
@@ -25,14 +25,15 @@
 
   function render() {
     var pub = S.pub;
-    var key = JSON.stringify(pub ? [pub.game, pub.players, pub.deals, pub.n_offers, pub.full] : pub);
+    var key = JSON.stringify(pub ? [pub.game, pub.players, pub.closed, pub.decided_now, pub.signed_now, !!pub.full] : pub);
     if (key === S.key) return;
     S.key = key;
     var bots = pub ? pub.players.filter(function (p) { return p.is_bot; }).length : 0;
-    var phaseName = { lobby: "Joining", briefing: "Briefing", open: "Market open", paused: "Paused", locked: "Results" };
+    var g = pub && pub.game;
+    var phaseName = g ? { lobby: "Joining", briefing: "Briefing", open: "Round " + g.round, reveal: "Round " + g.round + " result", locked: "Results" }[g.phase] : "";
     bar.innerHTML = '<div class="title">' + esc(cfg.title) + ' <span class="muted" style="font-weight:500">· ' + esc(cfg.subtitle) + "</span></div>" +
       '<div class="right">' + (bots ? '<span class="chip sim">Simulated run · ' + bots + " simulated players</span>" : "") +
-      (pub ? '<span class="chip">' + phaseName[pub.game.phase] + "</span>" : "") + "</div>";
+      (pub ? '<span class="chip">' + esc(phaseName) + "</span>" : "") + "</div>";
     V.redraw(stage, view());
   }
 

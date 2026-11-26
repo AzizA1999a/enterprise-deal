@@ -19,11 +19,6 @@
   // a list marked data-step-each appears one item per click
   Array.prototype.forEach.call(document.querySelectorAll("[data-step-each] > .d-fact"), function (el) { el.classList.add("step"); });
 
-  // the market length on the slides always matches config.js
-  Array.prototype.forEach.call(document.querySelectorAll("[data-market-min]"), function (el) {
-    if (cfg.marketSeconds) el.textContent = Math.round(cfg.marketSeconds / 60);
-  });
-
   if ($("def-note")) $("def-note").textContent = F.defNote || "";
 
   if ($("examples")) {

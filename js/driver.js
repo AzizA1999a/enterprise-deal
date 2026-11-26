@@ -1,8 +1,5 @@
 /* Runs on the host laptop only.
-   driver: the automatic steps (assign late joiners, open the market after the
-           briefing, lock at zero, resolve deliveries).
-   rivals: the incumbents' account managers. Always computer-played, in a real
-           class as well as in demo mode: they counter every start-up term sheet.
+   driver: the automatic steps (deal role cards, late joiners, open and close each round on the clock).
    bots:   simulated players for demo mode. They use the same calls as phones.
    speed:  a test speed (2x to 16x) for rehearsing alone. It only ever applies to a
            game that has simulated players in it; a real class runs at normal speed. */
@@ -54,11 +51,8 @@
     return ctx.api.hostState(ctx.code, ctx.pin).then(function (hs) {
       if (!leader.has(ctx.code)) return hs;
       return driver.tick(ctx, hs).then(function (changed) {
-        if (changed) return hs;
-        return rivals.tick(ctx, hs).then(function (moved) {
-          if (moved || !botsOn) return hs;
-          return bots.tick(ctx, hs).then(function () { return hs; });
-        });
+        if (changed || !botsOn) return hs;
+        return bots.tick(ctx, hs).then(function () { return hs; });
       });
     });
   }
@@ -66,13 +60,19 @@
   // ctx = { code, pin, cards, cfg, api }
   var driver = {
     busy: false,
+    roundMs: function (ctx, hs) { return speed.ms(ctx.code, hs.players, ctx.cfg.roundSeconds * 1000); },
+    revealMs: function (ctx, hs) { return speed.ms(ctx.code, hs.players, ctx.cfg.revealSeconds * 1000); },
 
+    // The host pressed Start: deal the role cards, then begin the briefing.
     start: function (ctx, hs) {
       var patch = E.assign(hs.players.map(function (p) { return { id: p.id, name: p.name }; }), ctx.cards, ctx.cfg);
       return ctx.api.hostApply(ctx.code, ctx.pin, patch).then(function () {
-        return ctx.api.host(ctx.code, ctx.pin, "start", { briefing_ms: speed.ms(ctx.code, hs.players, ctx.cfg.briefingSeconds * 1000) });
+        return ctx.api.host(ctx.code, ctx.pin, "start",
+          { briefing_ms: speed.ms(ctx.code, hs.players, ctx.cfg.briefingSeconds * 1000), rules: E.serverRules(ctx.cfg) });
       });
     },
+    openRound: function (ctx, hs) { return ctx.api.host(ctx.code, ctx.pin, "open", { ms: driver.roundMs(ctx, hs) }); },
+    closeRound: function (ctx, hs) { return ctx.api.host(ctx.code, ctx.pin, "close", { reveal_ms: driver.revealMs(ctx, hs) }); },
 
     // Call on every host refresh. Does at most one automatic step.
     tick: function (ctx, hs) {
@@ -83,54 +83,15 @@
       if (g.phase !== "lobby" && g.phase !== "locked" && newcomers.length) {
         step = function () { return ctx.api.hostApply(ctx.code, ctx.pin, E.assignLate(newcomers, assigned, ctx.cards, ctx.cfg)); };
       } else if (g.phase === "briefing" && hs.now >= g.briefing_ends_at) {
-        step = function () { return ctx.api.host(ctx.code, ctx.pin, "open", { market_ms: speed.ms(ctx.code, hs.players, ctx.cfg.marketSeconds * 1000) }); };
+        step = function () { return driver.openRound(ctx, hs); };
       } else if (g.phase === "open" && hs.now >= g.ends_at) {
-        step = function () { return ctx.api.host(ctx.code, ctx.pin, "lock"); };
-      } else if (g.phase === "locked" && E.needsResolve(assigned, hs.offers)) {
-        step = function () { return ctx.api.hostApply(ctx.code, ctx.pin, E.resolve(assigned, hs.offers, ctx.cfg)); };
+        step = function () { return driver.closeRound(ctx, hs); };
+      } else if (g.phase === "reveal" && g.ends_at && hs.now >= g.ends_at) {
+        step = function () { return driver.openRound(ctx, hs); };
       }
       if (!step) return Promise.resolve(false);
       driver.busy = true;
       return step().then(function () { driver.busy = false; return true; }, function (e) { driver.busy = false; throw e; });
-    }
-  };
-
-  // ===================================================================
-  // The incumbents' account managers. One per buyer, played by this laptop.
-  var rivals = {
-    plans: {},
-    rnd: Math.random,
-    busy: false,
-
-    tick: function (ctx, hs) {
-      var R = ctx.cfg.rivals, g = hs.game;
-      if (g.phase === "lobby") rivals.plans = {};
-      if (!R || !R.on || rivals.busy || g.phase !== "open" || !g.total_ms) return Promise.resolve(false);
-      var elapsed = g.total_ms - Math.max(0, g.ends_at - hs.now);
-      var frac = elapsed / g.total_ms, t = Math.round(elapsed / 1000);
-      var pubs = {}, patch = [], events = [], r = rivals.rnd;
-      hs.players.forEach(function (p) { pubs[p.id] = p.pub; });
-      hs.players.forEach(function (b) {
-        if (b.role !== "buyer" || b.decision) return;
-        var pl = rivals.plans[b.id] || (rivals.plans[b.id] = { early: R.earlyRenewalAt[0] + r() * (R.earlyRenewalAt[1] - R.earlyRenewalAt[0]), due: null });
-        var mine = hs.offers.filter(function (o) { return o.buyer_id === b.id; });
-        var c = E.rivalCounter(b, mine, pubs, ctx.cfg, { early: frac >= pl.early });
-        if (!c) { pl.due = null; return; }
-        // An account manager needs a moment to hear about the start-up and get a discount approved.
-        if (pl.due == null) pl.due = hs.now + (c.kind === "early" ? 0 : (R.reactSeconds[0] + r() * (R.reactSeconds[1] - R.reactSeconds[0])) * 1000 / speed.of(ctx.code, hs.players));
-        if (hs.now < pl.due) return;
-        pl.due = null;
-        c.at = hs.now; c.t = t;
-        var card = E.clone(b.card), pub = E.clone(b.pub);
-        card.incumbent.counters = E.counters(card).concat([c]);
-        pub.defence = { n: card.incumbent.counters.length, t: t, by: card.incumbent.name };
-        patch.push({ id: b.id, card: card, pub: pub });
-        events.push({ type: "counter", actor: b.id, data: { incumbent: card.incumbent.name, number: pub.defence.n, kind: c.kind, discount_pct: c.pct, extra: c.addon, against: c.vs, argument: c.attack } });
-      });
-      if (!patch.length) return Promise.resolve(false);
-      rivals.busy = true;
-      return ctx.api.hostApply(ctx.code, ctx.pin, { players: patch, events: events })
-        .then(function () { rivals.busy = false; return true; }, function (e) { rivals.busy = false; throw e; });
     }
   };
 
@@ -156,224 +117,79 @@
       return Promise.all(jobs);
     },
 
+    // A simulated buyer's character, and when in each round it makes up its mind.
     plan: function (p) {
       var r = bots.rnd, pl = bots.plans[p.id];
-      if (pl) return pl;
-      if (p.role === "seller") {
-        // asks: does this seller find out what a buyer needs before writing the term sheet? told: what each buyer said.
-        pl = { sendAt: [0.04 + r() * 0.3, 0.2 + r() * 0.4, 0.4 + r() * 0.42].sort(), sent: 0, seen: {}, nextAnswer: 0,
-               asks: r() < 0.55, told: {}, loads: r() < 0.6 };
-      } else {
-        pl = { wake: 0.18 + r() * 0.35, giveUp: 0.74 + r() * 0.22, nextLook: 0, scores: {}, reason: null, abstain: r() < 0.12 };
+      if (!pl) pl = bots.plans[p.id] = { nerve: r(), at: {}, met: {} };
+      return pl;
+    },
+
+    // What a simulated buyer believes about a start-up, from what it is allowed to see in this round.
+    belief: function (b, s, deals, round, rule) {
+      var done = round - 1;
+      var own = deals.filter(function (d) { return d.round <= done && d.buyer_id === b.id && d.seller_id === s.id; });
+      if (own.some(function (d) { return d.delivered === false; })) return "bad";      // it burned me
+      if (own.some(function (d) { return d.delivered === true; })) return "good";      // it delivered for me
+      if (rule.intros) {
+        var k = b.card.knows.filter(function (x) { return x.id === s.id; })[0];
+        if (k) return k.ready ? "good" : "bad";
       }
-      pl.exitDelay = 1500 + r() * 9000;
-      return (bots.plans[p.id] = pl);
-    },
-
-    scoreOffer: function (buyer, o, sellerPub, cfg) {
-      var f = E.fit(buyer.card, o, sellerPub, cfg);
-      var conn = buyer.card.connections.filter(function (c) { return c.id === o.seller_id; })[0];
-      var risky = buyer.card.priority === "lowest_risk";
-      var hard = (o.proof || []).filter(function (a) { return a !== "pilot_ready"; }).length;
-      // What fits the buyer counts for most. Other extras still reassure a little: proof and a pilot make failure less likely or less costly.
-      var parts = {
-        price: f.savingsPct * (buyer.card.priority === "lowest_cost" ? 1.4 : 0.8),
-        proof: hard * 7 * (risky ? 1.5 : 1),
-        pilot: o.pilot ? 9 * (risky ? 1.5 : 1) : 0,
-        trust: conn ? 6 + (conn.reliability - 0.75) * 100 : -3,
-        fit: (f.priorityMet ? 26 : 0) + (f.constraintMet ? 0 : -40)
-      };
-      var total = f.overBudget ? -999 : parts.price + parts.proof + parts.pilot + parts.trust + parts.fit + (bots.rnd() * 16 - 8);
-      var top = Object.keys(parts).sort(function (a, b) { return parts[b] - parts[a]; })[0];
-      var why = !f.constraintMet ? "constraint" : f.overBudget || f.savingsPct < 5 ? "price" :
-                hard === 0 && !o.pilot ? "proof" : !conn ? "unknown" : "fit";
-      return { total: total, top: top, why: why };
-    },
-
-    // What a seller knows about a buyer: through a connection, or because it asked and the buyer answered.
-    learn: function (s, b, pl) {
-      var k = s.card.connections.filter(function (c) { return c.id === b.id; })[0];
-      if (k) return { priority: k.priority, constraint: k.constraint, via: "connection" };
-      if (!pl.asks) return null;
-      if (pl.told[b.id] == null) pl.told[b.id] = bots.rnd() < 0.85;     // most buyers answer a direct question
-      return pl.told[b.id] ? { priority: b.card.priority, constraint: b.card.constraint, via: "asked" } : null;
-    },
-
-    // Can this seller ever satisfy the boss's rule? If not, a seller who asked walks away and saves the term sheet.
-    canServe: function (s, b, info, cfg) {
-      var c = info.constraint || {}, T = s.card.tokens;
-      if (c.type === "requires_proof") return s.card.assets.indexOf(c.proof) >= 0;
-      if (c.type === "max_deploy_weeks") return s.card.deployWeeks <= c.weeks || !!(T && T.fastWeeks <= c.weeks);
-      if (c.type === "min_savings") return s.card.floor <= b.card.incumbent.price * (1 - c.pct / 100);
-      return true;
-    },
-
-    sellerOffer: function (ctx, hs, s, pl) {
-      var r = bots.rnd, cfg = ctx.cfg, T = s.card.tokens;
-      var mine = hs.offers.filter(function (o) { return o.seller_id === s.id; });
-      var open = hs.players.filter(function (b) { return b.role === "buyer" && b.category === s.category && !b.decision; });
-      if (!open.length) return null;
-      var fresh = open.filter(function (b) { return !mine.some(function (o) { return o.buyer_id === b.id; }); });
-      var revised = !fresh.length;
-      var pool = revised ? open : fresh;
-      // Qualify: drop buyers this seller knows it cannot serve, when there is anyone else to pitch.
-      var worth = pool.filter(function (b) { var i = bots.learn(s, b, pl); return !i || bots.canServe(s, b, i, cfg); });
-      if (worth.length && r() < 0.8) pool = worth;
-      var known = pool.filter(function (b) { return s.card.connections.some(function (c) { return c.id === b.id; }); });
-      var target = known.length && r() < 0.85 ? E.pick(known, r) : E.pick(pool, r);
-      var info = bots.learn(s, target, pl);
-      var open2 = mine.filter(function (o) { return o.buyer_id === target.id && o.status === "pending"; })[0];
-      var free = E.tokensFree(s.card, mine, open2 && open2.id);
-      var terms = open2 ? { pilot: !!open2.pilot, fast: !!open2.fast, proof: (open2.proof || []).filter(function (a) { return a !== "pilot_ready"; }) }
-                        : { pilot: false, fast: false, proof: [] };
-      // Add one extra if the tokens are there.
-      function add(kind, asset) {
-        var t = { pilot: terms.pilot, fast: terms.fast, proof: terms.proof.slice() };
-        if (kind === "pilot") t.pilot = true;
-        else if (kind === "fast") { if (!T || s.card.deployWeeks <= T.fastWeeks) return false; t.fast = true; }
-        else { if (s.card.assets.indexOf(asset) < 0 || t.proof.indexOf(asset) >= 0) return false; t.proof.push(asset); }
-        if (E.offerCost(s.card, t) > free) return false;
-        terms = t;
-        return true;
+      if (rule.record) {
+        var rec = E.record(s.id, deals, done);
+        if (rec.failed.length) return "bad";
+        if (rec.delivered.length) return "good";
       }
-      var frac = 0.35 + r() * 0.65, cap = Infinity, guess;
-      if (info) {
-        // Tailor: first the boss's rule, then the priority.
-        var c = info.constraint || {}, inc = target.card.incumbent.price;
-        if (c.type === "requires_pilot") add("pilot");
-        else if (c.type === "requires_proof") add("proof", c.proof);
-        else if (c.type === "max_deploy_weeks" && s.card.deployWeeks > c.weeks) add("fast");
-        else if (c.type === "min_savings") cap = Math.min(cap, Math.floor(inc * (1 - c.pct / 100)));
-        if (info.priority === "lowest_risk") { if (!terms.pilot && terms.proof.indexOf("reference") < 0) { if (!add("proof", "reference")) add("pilot"); } }
-        else if (info.priority === "fastest_deployment") { if (s.card.deployWeeks > cfg.priorityRules.fastestDeployWeeks) add("fast"); }
-        else if (info.priority === "lowest_cost") { cap = Math.min(cap, Math.floor(inc * (1 - cfg.priorityRules.lowestCostSavingsPct / 100))); frac = r() * 0.35; }
-        if (r() < 0.3) add("proof", E.pick(["reference", "security_cert"], r));       // a little extra reassurance
-        guess = info.priority;
-      } else {
-        // Did not ask: guess, and pile on whatever the tokens allow.
-        var extras = E.shuffle([["pilot"], ["fast"], ["proof", "reference"], ["proof", "security_cert"]], r);
-        extras.forEach(function (x) { if (pl.loads || r() < 0.45) add(x[0], x[1]); });
-        guess = r() < 0.6 ? "none" : E.pick(["lowest_cost", "lowest_risk", "fastest_deployment"], r);
-      }
-      if (revised) frac *= 0.5;
-      var price = Math.round(s.card.floor + (s.card.list - s.card.floor) * frac);
-      price = Math.max(s.card.floor, Math.min(price, cap));
-      var more = { fast: terms.fast, guess: guess };
-      if (open2) return ctx.api.revise(ctx.code, s.token, open2.id, Math.min(open2.price, price), terms.pilot, terms.proof, more);
-      return ctx.api.offer(ctx.code, s.token, target.id, price, terms.pilot, terms.proof, target.card.desk, more);
+      if (rule.proof && s.card.proof) return "good";
+      return "unknown";
     },
 
-    // A seller hears that the incumbent has countered, and improves the open term sheet.
-    sellerAnswer: function (ctx, hs, s, pl) {
-      var r = bots.rnd, job = null;
-      var mine = hs.offers.filter(function (o) { return o.seller_id === s.id; });
-      mine.forEach(function (o) {
-        if (job || o.status !== "pending") return;
-        var b = hs.players.filter(function (x) { return x.id === o.buyer_id; })[0];
-        var n = b && b.pub && b.pub.defence ? b.pub.defence.n : 0;
-        if (!n || pl.seen[o.id] === n) return;
-        pl.seen[o.id] = n;
-        if (r() > 0.75) return;                                  // some sellers never hear about it
-        var price = Math.round(o.price - (o.price - s.card.floor) * (0.3 + r() * 0.5));
-        var pilot = !!o.pilot;
-        if (!pilot && (s.card.assets.indexOf("pilot_ready") >= 0 || r() < 0.4) &&
-            E.offerCost(s.card, { pilot: true, fast: o.fast, proof: o.proof }) <= E.tokensFree(s.card, mine, o.id)) pilot = true;
-        if (price === o.price && pilot === !!o.pilot) return;
-        job = ctx.api.revise(ctx.code, s.token, o.id, price, pilot, o.proof || [], { fast: !!o.fast, guess: o.guess });
+    // One simulated buyer decides for the round. Returns a Promise, or null to try again later.
+    decide: function (ctx, hs, b, pl) {
+      var r = bots.rnd, g = hs.game, round = g.round, rule = E.roundRule(ctx.cfg, round);
+      var sellers = hs.players.filter(function (p) { return p.role === "seller"; });
+      // In two minutes a buyer hears a handful of pitches, not all of them.
+      if (!pl.met[round]) {
+        pl.met[round] = E.shuffle(sellers, r).slice(0, 3 + Math.floor(r() * 3)).map(function (s) { return s.id; });
+        // With an introduction in hand, a buyer goes looking for the start-up it knows.
+        if (rule.intros) (b.card.knows || []).forEach(function (k) { if (pl.met[round].indexOf(k.id) < 0) pl.met[round].push(k.id); });
+      }
+      var free = sellers.filter(function (s) {
+        return pl.met[round].indexOf(s.id) >= 0 && !hs.deals.some(function (d) { return d.round === round && d.seller_id === s.id; });
       });
-      return job;
-    },
-
-    buyerLook: function (ctx, hs, b, pl, frac) {
-      var r = bots.rnd;
-      var byId = {};
-      hs.players.forEach(function (p) { byId[p.id] = p; });
-      var pending = hs.offers.filter(function (o) { return o.buyer_id === b.id && o.status === "pending"; });
-      pending.forEach(function (o) {
-        if (!pl.scores[o.id]) pl.scores[o.id] = bots.scoreOffer(b, o, byId[o.seller_id].pub, ctx.cfg);
+      var good = [], unknown = [];
+      free.forEach(function (s) {
+        var v = bots.belief(b, s, hs.deals, round, rule);
+        if (v === "good") good.push(s); else if (v === "unknown") unknown.push(s);
       });
-      // The incumbent's standing counter-offer raises the bar a start-up has to clear.
-      var made = E.counters(b.card), level = made.length, standing = E.standing(b.card, level);
-      var stayGain = E.stayValue(standing, ctx.cfg).total - ctx.cfg.points.incumbent;
-      var threshold = 84 - 20 * frac + stayGain * 0.9;
-      // An edited term sheet is scored again.
-      pending.forEach(function (o) {
-        var key = o.price + ":" + (o.pilot ? 1 : 0) + ":" + (o.proof || []).length + (o.fast ? ":f" : "");
-        if (pl.scores[o.id].key !== key) { pl.scores[o.id] = bots.scoreOffer(b, o, byId[o.seller_id].pub, ctx.cfg); pl.scores[o.id].key = key; }
-      });
-      var best = pending.slice().sort(function (x, y) { return pl.scores[y.id].total - pl.scores[x.id].total; })[0];
-      if (best && pl.scores[best.id].total >= threshold) {
-        pl.reason = pl.scores[best.id].top;
-        return ctx.api.decide(ctx.code, b.token, best.id, true, null, best.price);
+      var pickOne = null, kind = "stay";
+      if (good.length && r() < 0.92) { pickOne = E.pick(good, r); kind = "full"; }
+      else if (unknown.length) {
+        if (rule.pilot) { if (r() < 0.35 + 0.35 * pl.nerve) { pickOne = E.pick(unknown, r); kind = "pilot"; } }
+        else if (r() < 0.1 + 0.4 * pl.nerve) { pickOne = E.pick(unknown, r); kind = "full"; }      // a blind bet on the pitch alone
       }
-      // Take the counter-offer: at the end, or sooner when it is the final one, or when nobody has come to pitch.
-      var takeNow = standing && (
-        (standing.kind === "final" && (!best || pl.scores[best.id].total < threshold - 6) && r() < 0.3) ||
-        (standing.kind === "early" && !pending.length && r() < 0.12));
-      if (frac >= pl.giveUp || takeNow) {
-        if (pl.abstain && !takeNow) return null;
-        pl.reason = "incumbent";
-        return ctx.api.incumbent(ctx.code, b.token, level);
-      }
-      var weak = pending.filter(function (o) { return pl.scores[o.id].total < threshold - 22; })[0];
-      if (weak) return ctx.api.decide(ctx.code, b.token, weak.id, false, r() < 0.85 ? pl.scores[weak.id].why : null);
-      return null;
-    },
-
-    exitAnswer: function (hs, p, pl) {
-      var r = bots.rnd;
-      if (p.role === "buyer") {
-        var a = p.decision === "startup" ? pl.reason || "fit" : "incumbent";
-        if (r() < 0.15) a = E.pick(p.decision === "startup" ? ["trust", "price", "proof", "fit", "pilot"] : ["incumbent", "incumbent", "price", "proof"], r);
-        return a;
-      }
-      var wins = hs.offers.filter(function (o) { return o.seller_id === p.id && o.status === "accepted"; });
-      if (!wins.length) return E.pick(["incumbent", "incumbent", "incumbent", "trust", "trust", "price", "price", "proof", "proof"], r);
-      var viaConn = wins.some(function (o) { return p.card.connections.some(function (c) { return c.id === o.buyer_id; }); });
-      if (viaConn && r() < 0.65) return "trust";
-      if (wins[0].pilot && r() < 0.35) return "pilot";
-      return E.pick(["price", "price", "proof", "proof", "fit"], r);
+      return ctx.api.sign(ctx.code, b.token, pickOne ? pickOne.card.code : null, kind);
     },
 
     // Call on every host refresh. Bots act through the normal player calls.
     tick: function (ctx, hs) {
-      var g = hs.game, jobs = [], fast = speed.of(ctx.code, hs.players);
-      var live = hs.players.filter(function (p) { return p.is_bot && p.role && p.token; });
-      if (g.phase === "open" && g.total_ms) {
-        var frac = (g.total_ms - Math.max(0, g.ends_at - hs.now)) / g.total_ms;
-        live.forEach(function (p) {
-          var pl = bots.plan(p), job = null;
-          if (p.role === "seller") {
-            if (p.offers_left > 0 && pl.sent < pl.sendAt.length && frac >= pl.sendAt[pl.sent]) {
-              pl.sent++;
-              job = bots.sellerOffer(ctx, hs, p, pl);
-            } else if (hs.now >= pl.nextAnswer) {
-              pl.nextAnswer = hs.now + (4000 + bots.rnd() * 6000) / fast;
-              job = bots.sellerAnswer(ctx, hs, p, pl);
-            }
-          } else if (!p.decision && frac >= pl.wake && hs.now >= pl.nextLook) {
-            pl.nextLook = hs.now + (2500 + bots.rnd() * 4000) / fast;
-            job = bots.buyerLook(ctx, hs, p, pl, frac);
-          }
-          if (job) jobs.push(job.catch(function () { /* lost a race with another player: ignore */ }));
-        });
-      } else if (g.phase === "locked") {
-        live.forEach(function (p) {
-          var pl = bots.plan(p);
-          if (p.exit_answer || p.points == null) return;
-          if (!pl.lockedSeen) { pl.lockedSeen = hs.now; return; }
-          if (hs.now - pl.lockedSeen < pl.exitDelay / fast) return;
-          jobs.push(ctx.api.exit(ctx.code, p.token, bots.exitAnswer(hs, p, pl)).catch(function () {}));
-        });
-      } else if (g.phase === "lobby") {
-        bots.plans = {};
-      }
+      var g = hs.game, jobs = [];
+      if (g.phase === "lobby") { bots.plans = {}; return Promise.resolve(0); }
+      if (g.phase !== "open" || !g.total_ms) return Promise.resolve(0);
+      var frac = (g.total_ms - Math.max(0, g.ends_at - hs.now)) / g.total_ms;
+      hs.players.forEach(function (b) {
+        if (!b.is_bot || b.role !== "buyer" || !b.token) return;
+        if (hs.deals.some(function (d) { return d.round === g.round && d.buyer_id === b.id; })) return;
+        var pl = bots.plan(b);
+        if (pl.at[g.round] == null) pl.at[g.round] = 0.2 + bots.rnd() * 0.65;
+        if (frac < pl.at[g.round]) return;
+        // Lost a race for a start-up that was signed a moment ago: think again on the next refresh.
+        jobs.push(bots.decide(ctx, hs, b, pl).catch(function () { pl.met[g.round] = null; }));
+      });
       return Promise.all(jobs).then(function () { return jobs.length; });
     }
   };
 
   B2B.driver = driver;
-  B2B.rivals = rivals;
   B2B.bots = bots;
   B2B.leader = leader;
   B2B.speed = speed;
