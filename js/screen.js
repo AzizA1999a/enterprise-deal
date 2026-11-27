@@ -16,7 +16,7 @@
     if (!S.code) return '<div class="s-h1">No game selected</div><p class="s-sub">Open this screen from the host panel.</p>';
     if (pub === undefined) return '<p class="s-sub">Connecting…</p>';
     if (pub === null) return '<div class="s-h1">Game ' + esc(S.code) + ' not found</div><p class="s-sub">Create a game from the host panel.</p>';
-    if (pub.game.phase !== "locked") return V.game(pub, S.code);
+    if (pub.game.phase !== "locked" || B2B.engine.stale(pub.game)) return V.game(pub, S.code);
     var v = pub.game.view || "closed";
     if (v === "closed" || !pub.full) return V.closed(pub);
     var st = B2B.stats.compute(pub.full, V.cards);
@@ -50,6 +50,7 @@
   var refresh = function () {};
   Promise.all([ui.loadJson("data/cards.json"), ui.loadJson("data/benchmarks.json").catch(function () { return {}; })]).then(function (r) {
     V.init(r[0], r[1]);
+    ui.watchVersion(false);
     ui.tickClocks(function () { return S.pub && S.pub.game; });
     refresh = ui.loop(function () {
       if (!S.code) { render(); return Promise.resolve(); }

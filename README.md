@@ -103,7 +103,12 @@ panel's first screen.
 | `art/` | The illustrations (made with Higgsfield in one print style). |
 
 After editing, reload the pages (and redeploy if the site is hosted). Each page loads its scripts and styles with a version stamp
-(`?v=...`). When a `js/` or `css/` file changes, change that stamp in all five HTML pages, so no browser keeps an old copy.
+(`?v=...`). When a `js/` or `css/` file changes, change that stamp in all five HTML pages and in `version.json`, so no
+browser keeps an old copy. Every open page compares its own stamp with `version.json` once a minute: a phone
+reloads itself, and the host panel, slides and projector show a red bar with a Reload button.
+
+If a game was started from a page that was still on an older version, every page says "This game needs a
+restart" instead of showing nothing. Reload the host panel and press **Reset game**.
 
 ## How the rules work
 
@@ -134,7 +139,7 @@ probably hung: stop it and run it again.
 ## Database
 
 `supabase/schema.sql`, then `002_face_to_face.sql`, `003_rivals.sql`, `004_tokens.sql`, `005_rounds.sql` and
-`006_campaign.sql` in `supabase/` is the full database: private tables plus the `sim_*` functions that phones call.
+`006_campaign.sql` and `007_retire_old_pages.sql` in `supabase/` is the full database: private tables plus the `sim_*` functions that phones call.
 The game uses the functions in `006_campaign.sql` (`sim_camp_*`); the earlier files are kept because that file
 builds on their tables.
 Phones can never read a table directly, so hidden card information stays hidden.

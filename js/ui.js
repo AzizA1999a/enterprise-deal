@@ -65,6 +65,43 @@
       }, 250);
     },
 
+    // The version this page was loaded with (the ?v= stamp on its scripts), and a check against the published one.
+    // A phone reloads itself once; the host panel, slides and projector show a bar with a Reload button,
+    // because reloading them is the presenter's call.
+    version: (function () {
+      var el = root.document && root.document.querySelector('script[src*="js/ui.js"]');
+      var m = el && /[?&]v=([^&]+)/.exec(el.getAttribute("src") || "");
+      return m ? m[1] : "";
+    })(),
+    hardReload: function () {
+      var u = new URL(root.location.href);
+      u.searchParams.set("_", String(Date.now()));          // a new address, so the browser fetches the page again
+      root.location.replace(u.toString());
+    },
+    watchVersion: function (auto) {
+      if (!ui.version) return;
+      function check() {
+        fetch("version.json?_=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+          if (!j || !j.v || j.v === ui.version) return;
+          var once = "b2bsim.reloaded." + j.v, done = false;
+          try { done = root.sessionStorage.getItem(once) === "1"; } catch (e) { /* no storage */ }
+          if (auto && !done) {
+            try { root.sessionStorage.setItem(once, "1"); } catch (e) { /* no storage */ }
+            return ui.hardReload();
+          }
+          if (root.document.getElementById("newversion")) return;
+          var bar = root.document.createElement("div");
+          bar.id = "newversion";
+          bar.innerHTML = "<span>This page is out of date. A newer version of the game has been published.</span><button type=\"button\">Reload now</button>";
+          bar.querySelector("button").addEventListener("click", function (ev) { ev.stopPropagation(); ui.hardReload(); });
+          root.document.body.appendChild(bar);
+        }).catch(function () { /* offline: nothing to compare with */ });
+      }
+      check();
+      setInterval(check, 60000);
+      root.document.addEventListener("visibilitychange", function () { if (!root.document.hidden) check(); });
+    },
+
     download: function (filename, text) {
       var a = document.createElement("a");
       a.href = URL.createObjectURL(new Blob([text], { type: "text/csv;charset=utf-8" }));

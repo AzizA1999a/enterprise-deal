@@ -56,6 +56,11 @@
       '<div class="card" id="roster" style="margin-top:14px"></div>';
   }
 
+  function staleView() {
+    return '<div class="card warn"><b>This game was started by an older version of this site.</b><p style="margin-top:6px">That happens when a host page or the slides were left open, or cached, from before an update. ' +
+      "Close any other open copy of the host panel or the slides, then press Reset game here and start again.</p></div>" +
+      '<div class="controls"><button class="btn danger" data-act="reset">Reset game</button></div>' + (H.msg ? '<div class="card warn">' + esc(H.msg) + "</div>" : "");
+  }
   function statusView(hs) {
     var g = hs.game, Pl = hs.players, R = g.rules;
     var startups = Pl.filter(function (p) { return p.role; });
@@ -126,8 +131,9 @@
     var key = JSON.stringify([hs.game, hs.players, hs.moves.length, hs.intros, H.msg]);
     if (key === H.key) return;
     H.key = key;
-    document.getElementById("status").innerHTML = statusView(hs);
-    document.getElementById("roster").innerHTML = rosterView(hs);
+    var old = E.stale(hs.game);
+    document.getElementById("status").innerHTML = old ? staleView() : statusView(hs);
+    document.getElementById("roster").innerHTML = old ? "<h2>Players</h2><p class=\"muted\">Hidden until the game is reset.</p>" : rosterView(hs);
     speedNote();
   }
 
@@ -211,6 +217,7 @@
     H.cards = cards;
     H.problems = E.validateCards(cards);
     render();
+    ui.watchVersion(false);
     ui.tickClocks(function () { return H.hs && H.hs.game; });
     refresh = ui.loop(function () {
       if (!H.sess) return Promise.resolve();

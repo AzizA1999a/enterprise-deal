@@ -51,7 +51,7 @@
   function publicRules(g) {
     if (!g.rules) return null;
     var r = JSON.parse(JSON.stringify(g.rules));
-    r.giants = Object.keys(r.giants);
+    r.giants = Object.keys(r.giants || {});
     return r;
   }
   function gameView(g, secret) {
@@ -130,7 +130,7 @@
         return v;
       });
       out.moves = g.moves.filter(function (m) { return m.player_id === me.id; }).map(moveView);
-      if (me.state.giant && B2B.engine.knowsPriority(me.card, me.state)) out.priority = g.rules.giants[me.state.giant].priority;
+      if (me.state && me.state.giant && B2B.engine.knowsPriority(me.card, me.state)) out.priority = g.rules.giants[me.state.giant].priority;
       return out;
     },
 

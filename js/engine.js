@@ -68,6 +68,13 @@
              fit: G.fit, misfit: G.misfit, fitDoors: G.fitDoors.slice(), moves: clone(G.moves), giants: giants };
   }
   // Rounds whose results are in.
+  // A game started by an older version of this site (a host page left open, or a cached copy) has no
+  // companies in its rules. Every page checks this and says so, instead of failing on data it cannot read.
+  function stale(game) {
+    if (!game || game.phase === "lobby") return false;
+    var gs = game.rules && game.rules.giants;             // an object for the host, a list of ids for everyone else
+    return !(gs && (Array.isArray(gs) ? gs.length : Object.keys(gs).length));
+  }
   function closedRounds(game) {
     if (!game) return 0;
     if (game.phase === "open") return Math.max(0, (game.round || 0) - 1);
@@ -167,7 +174,7 @@
   B2B.engine = {
     DOORS: DOORS, MESSAGES: MESSAGES,
     makeRng: makeRng, shuffle: shuffle, pick: pick, clone: clone, clamp: clamp,
-    validateCards: validateCards, giantsInPlay: giantsInPlay, makeRules: makeRules, closedRounds: closedRounds, newState: newState,
+    validateCards: validateCards, giantsInPlay: giantsInPlay, makeRules: makeRules, closedRounds: closedRounds, stale: stale, newState: newState,
     assign: assign, assignLate: assignLate,
     baseOdds: baseOdds, fitShift: fitShift, odds: odds, spentIn: spentIn, budgetLeft: budgetLeft, knowsPriority: knowsPriority, score: score
   };

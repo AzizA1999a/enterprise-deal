@@ -260,6 +260,7 @@
     D.cards = r[0];
     V.init(r[0], r[1]);
     show(start - 1, true);
+    ui.watchVersion(false);
     ui.tickClocks(function () { return D.pub && D.pub.game; });
     refresh = ui.loop(function () {
       if (!D.code) { renderLive(); return Promise.resolve(); }
@@ -268,7 +269,7 @@
       return duty.then(function () { return api.public(D.code); }).then(function (pub) {
         if (pub) ui.syncClock(pub.now);
         D.pub = pub;
-        D.st = pub && pub.full ? B2B.stats.compute(pub.full, D.cards) : null;
+        D.st = pub && pub.full && !B2B.engine.stale(pub.game) ? B2B.stats.compute(pub.full, D.cards) : null;
         renderLive();
       });
     }, function () {

@@ -427,3 +427,7 @@ html.deck { font-size: 20.8px; }
 .d-map b { font-size: 1.25rem; font-weight: 700; line-height: 1.2; }
 .d-map em { font-style: normal; font-family: var(--display); font-weight: 800; font-size: 1.4rem; color: var(--accent-text); line-height: 1.1; }
 .d-map span { font-size: 1.02rem; color: var(--muted); font-weight: 500; line-height: 1.25; }
+/* shown on the host panel, slides and projector when a newer version of the site is published */
+#newversion { position: fixed; left: 0; right: 0; top: 0; z-index: 100; display: flex; gap: 14px; align-items: center; justify-content: center; flex-wrap: wrap;
+  padding: 10px 16px; background: var(--bad); color: #fff; font: 700 15px var(--font); }
+#newversion button { font: inherit; border: 2px solid #fff; background: #fff; color: var(--bad); border-radius: 999px; padding: 4px 16px; cursor: pointer; }

@@ -123,7 +123,12 @@
   };
   V.closed = function (pub) { return V.reveal(pub); };
   // The live game slide: follows the phase to the end.
+  V.stale = function () {
+    return '<div style="flex:1;display:grid;place-items:center"><div class="s-panel" style="max-width:46rem"><div class="s-h2">This game needs a restart</div>' +
+      '<p class="s-sub" style="margin-top:0.6rem">It was started from an out-of-date page. Reload the host panel, press Reset game, and start again.</p></div></div>';
+  };
   V.game = function (pub, code) {
+    if (E.stale(pub.game)) return V.stale();
     var p = pub.game.phase;
     return p === "lobby" ? V.lobby(pub, code) : p === "briefing" ? V.briefing(pub) : p === "open" ? V.round(pub) : V.reveal(pub);
   };

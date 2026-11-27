@@ -49,7 +49,7 @@
   // One round of host duties: read the game, run automatic steps, let bots act. Returns the state.
   function hostRound(ctx, botsOn) {
     return ctx.api.hostState(ctx.code, ctx.pin).then(function (hs) {
-      if (!leader.has(ctx.code)) return hs;
+      if (!leader.has(ctx.code) || E.stale(hs.game)) return hs;
       return driver.tick(ctx, hs).then(function (changed) {
         if (changed || !botsOn) return hs;
         return bots.tick(ctx, hs).then(function () { return hs; });
