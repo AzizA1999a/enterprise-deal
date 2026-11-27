@@ -189,13 +189,14 @@
         '<div class="stack"><input class="field" id="name" maxlength="24" autocomplete="given-name" placeholder="Your first name" value="' + esc(store.getItem("b2bsim.name") || "") + '">' +
         '<button class="btn primary block" data-act="join"' + (S.busy ? " disabled" : "") + ">Join the game</button></div>";
     }
+    // A game started from an out-of-date host page: say so, whether or not this player was given a role in it.
+    if (E.stale(g) || (me.role && !me.state)) {
+      return '<div class="hero"><div class="label">One moment</div><h1>This game needs a restart.</h1><p class="muted">It was started from an out-of-date host page. ' +
+        "Ask the host to reload their page and press Reset game. Then scan the code again.</p></div>";
+    }
     if (!me.role) {
       return '<div class="hero-art"><img src="art/hero-s.jpg" alt=""></div><div class="hero"><div class="label">You are in</div><h1>' + esc(me.name) + '</h1><p class="muted">' +
         (g.phase === "lobby" ? st.n_players + " joined so far. Keep this page open: your start-up appears when the host starts." : "Getting your start-up…") + "</p></div>";
-    }
-    if (E.stale(g) || !me.state) {
-      return '<div class="hero"><div class="label">One moment</div><h1>This game needs a restart.</h1><p class="muted">It was started from an out-of-date host page. ' +
-        "Ask the host to reload their page and press Reset game. Then scan the code again.</p></div>";
     }
     var s = me.state, started = st.moves.length > 0;
     if (g.phase === "locked") return header("Start-up", me.card.org, "") + roundDone(st);
